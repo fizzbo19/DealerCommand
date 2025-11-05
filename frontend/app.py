@@ -131,7 +131,7 @@ st.markdown(
 
 # ---------- Sidebar (status + quick actions) ----------
 with st.sidebar:
-    st.image("assets/dealercommand_logo.png" if os.path.exists("assets/dealercommand_logo.png") else "")
+    st.image("frontend/Assets/dealercommand_logo.png" if os.path.exists("frontend/Assets/dealercommand_logo.png") else "")
     st.title("DealerCommand")
     st.caption("AI listings • Social captions • Analytics")
     email_sidebar = st.text_input("Your dealership email", key="sidebar_email")
