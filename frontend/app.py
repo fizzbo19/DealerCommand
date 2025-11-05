@@ -10,7 +10,7 @@ from openai import OpenAI
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Backend imports
-from backend.trial_manager import check_trial_status
+from backend.trial_manager import get_trial_status
 from backend.sheet_utils import append_to_google_sheet
 from backend.stripe_utils import create_checkout_session
 
@@ -35,7 +35,8 @@ api_key = st.text_input("Enter your OpenAI API key", type="password")
 
 if user_email:
     # Check if user is in trial and get usage count
-    in_trial, trial_start, usage_count = check_trial_status(user_email)
+    in_trial, trial_start, usage_count = get_trial_status(user_email)
+    in_trial = status == "active" or status == "new"
 
     if in_trial:
         st.success(f"🎉 You’re in your 3-month premium trial! Started: {trial_start.date()} — Listings used: {usage_count}")
