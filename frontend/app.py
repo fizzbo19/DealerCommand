@@ -5,6 +5,7 @@ import datetime
 import json
 from openai import OpenAI
 import gspread
+from pathlib import Path
 import stripe
 from google.oauth2.service_account import Credentials
 
@@ -131,7 +132,13 @@ st.markdown(
 
 # ---------- Sidebar (status + quick actions) ----------
 with st.sidebar:
-    st.image("frontend/Assets/dealercommand_logo.png" if os.path.exists("frontend/Assets/dealercommand_logo.png") else "")
+    # Logo (safe loading)
+    logo_path = Path(__file__).parent / "assets" / "dealercommand_logo.png"
+    if logo_path.exists():
+        st.image(str(logo_path), use_column_width=True)
+    else:
+        st.text("DealerCommand Logo not found")
+
     st.title("DealerCommand")
     st.caption("AI listings • Social captions • Analytics")
     email_sidebar = st.text_input("Your dealership email", key="sidebar_email")
