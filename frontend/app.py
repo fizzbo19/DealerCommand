@@ -1,18 +1,19 @@
+# frontend/app.py
 import sys
 import os
 from datetime import datetime
-
 import streamlit as st
 from openai import OpenAI
 
-# Backend path for imports
+# Add backend path for imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+# ----------------------
 # Backend Imports
+# ----------------------
 from backend.trial_manager import ensure_user_and_get_status, increment_usage
 from backend.sheet_utils import append_to_google_sheet
 from backend.stripe_utils import create_checkout_session
-
 
 # ----------------------
 # Streamlit UI Config
@@ -29,7 +30,13 @@ Enjoy a **3-month premium trial** with full access to all tools before choosing 
 # User Inputs
 # ----------------------
 user_email = st.text_input("Enter your dealership email to start your trial", "")
-api_key = st.text_input("Enter your OpenAI API key", type="password")
+
+# Fetch the API key from environment (securely)
+api_key = os.environ.get("OPENAI_API_KEY")
+
+if not api_key:
+    st.error("⚠️ OpenAI API key not found in environment. Please set `OPENAI_API_KEY` in your deployment.")
+    st.stop()
 
 if user_email:
     # Get trial info
@@ -66,14 +73,11 @@ if user_email:
             submit = st.form_submit_button("✨ Generate Listing")
 
         if submit:
-            if not api_key:
-                st.warning("⚠️ Please enter your OpenAI API key.")
-            else:
-                try:
-                    client = OpenAI(api_key=api_key)
+            try:
+                client = OpenAI(api_key=api_key)
 
-                    # AI Prompt
-                    prompt = f"""
+                # AI Prompt
+                prompt = f"""
 You are an expert automotive marketing assistant. 
 Write a professional, engaging listing for this car:
 
@@ -95,41 +99,41 @@ Guidelines:
 - Include relevant emojis
 """
 
-                    with st.spinner("🤖 Generating your listing..."):
-                        response = client.chat.completions.create(
-                            model="gpt-4o-mini",
-                            messages=[
-                                {"role": "system", "content": "You are a car sales assistant that writes engaging listings."},
-                                {"role": "user", "content": prompt},
-                            ],
-                            temperature=0.7,
-                        )
-                        listing = response.choices[0].message.content.strip()
+                with st.spinner("🤖 Generating your listing..."):
+                    response = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[
+                            {"role": "system", "content": "You are a car sales assistant that writes engaging listings."},
+                            {"role": "user", "content": prompt},
+                        ],
+                        temperature=0.7,
+                    )
+                    listing = response.choices[0].message.content.strip()
 
-                    # Display AI result
-                    st.subheader("📋 Generated Listing:")
-                    st.markdown(listing)
-                    st.download_button("⬇️ Download Listing", listing, file_name="car_listing.txt")
+                # Display AI result
+                st.subheader("📋 Generated Listing:")
+                st.markdown(listing)
+                st.download_button("⬇️ Download Listing", listing, file_name="car_listing.txt")
 
-                    # Save to Google Sheets
-                    car_data = {
-                        "Make": make,
-                        "Model": model,
-                        "Year": year,
-                        "Mileage": mileage,
-                        "Color": color,
-                        "Fuel Type": fuel,
-                        "Transmission": transmission,
-                        "Price": price,
-                        "Features": features,
-                        "Dealer Notes": notes,
-                    }
-                    append_to_google_sheet(user_email, car_data)
-                    increment_usage(user_email, listing)
+                # Save to Google Sheets
+                car_data = {
+                    "Make": make,
+                    "Model": model,
+                    "Year": year,
+                    "Mileage": mileage,
+                    "Color": color,
+                    "Fuel Type": fuel,
+                    "Transmission": transmission,
+                    "Price": price,
+                    "Features": features,
+                    "Dealer Notes": notes,
+                }
+                append_to_google_sheet(user_email, car_data)
+                increment_usage(user_email, listing)
 
-                    st.success("✅ Listing generated and saved successfully!")
+                st.success("✅ Listing generated and saved successfully!")
 
-                except Exception as e:
-                    st.error(f"⚠️ Error generating listing: {e}")
+            except Exception as e:
+                st.error(f"⚠️ Error generating listing: {e}")
 else:
     st.info("👋 Enter your dealership email above to begin your 3-month premium trial.")
