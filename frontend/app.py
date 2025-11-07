@@ -30,8 +30,8 @@ st.set_page_config(
 # ----------------------
 st.markdown("""
 <div style="display:flex; justify-content:center; align-items:center; margin-top:1rem; margin-bottom:1rem;">
-    <img src="https://raw.githubusercontent.com/yourusername/dealercommand/main/frontend/assets/dealercommand_logo.png" 
-         alt="DealerCommand AI Logo" width="200" style="border-radius:8px;">
+    <img src="frontend/assets/dealercommand_logov1.png" 
+     alt="DealerCommand AI Logo" width="200" style="border-radius:8px;">
 </div>
 """, unsafe_allow_html=True)
 
