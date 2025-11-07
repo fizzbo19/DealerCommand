@@ -6,16 +6,14 @@ import streamlit as st
 from backend.trial_manager import ensure_user_and_get_status
 
 st.set_page_config(page_title="Login | DealerCommand", layout="centered")
-
-st.header("🔐 Login / Sign up")
+st.header("🔐 Login / Sign Up")
 
 email = st.text_input("Dealership email")
-# optional: add simple passcode field if you want
+
 if st.button("Continue"):
     if not email:
-        st.warning("Please enter an email.")
+        st.warning("Please enter your email.")
     else:
-        # ensure user exists in sheet & get status
         try:
             status, expiry, used = ensure_user_and_get_status(email)
             st.session_state["authenticated"] = True
@@ -28,4 +26,4 @@ if st.button("Continue"):
                 st.error("Your trial has expired. Please upgrade.")
             st.experimental_rerun()
         except Exception as e:
-            st.error(f"Error accessing backend: {e}")
+            st.error(f"Backend error: {e}")

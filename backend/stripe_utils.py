@@ -2,20 +2,34 @@
 import os
 import stripe
 
-stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
+# Read Stripe keys from environment variables
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
+STRIPE_SUCCESS_URL = os.environ.get("STRIPE_SUCCESS_URL", "https://yourdomain.com/success")
+STRIPE_CANCEL_URL = os.environ.get("STRIPE_CANCEL_URL", "https://yourdomain.com/cancel")
 
-def create_checkout_session(price_id, customer_email, success_url=None, cancel_url=None):
-    if not stripe.api_key:
+stripe.api_key = STRIPE_SECRET_KEY
+
+def create_checkout_session(user_email, price_id=None):
+    """
+    Creates a Stripe Checkout session for the given user and price_id.
+    Returns the session URL or None if failure.
+    """
+    if not STRIPE_SECRET_KEY:
+        print("❌ STRIPE_SECRET_KEY not set in environment.")
         return None
+    if not price_id:
+        print("❌ price_id not provided.")
+        return None
+
     try:
         session = stripe.checkout.Session.create(
-            payment_method_types=["card"],
-            mode="subscription",
-            customer_email=customer_email,
+            customer_email=user_email,
             line_items=[{"price": price_id, "quantity": 1}],
-            success_url=success_url or "https://your-site/success",
-            cancel_url=cancel_url or "https://your-site/cancel",
+            mode="subscription",
+            success_url=STRIPE_SUCCESS_URL,
+            cancel_url=STRIPE_CANCEL_URL,
         )
         return session.url
-    except Exception:
+    except Exception as e:
+        print(f"⚠️ Stripe session creation failed: {e}")
         return None

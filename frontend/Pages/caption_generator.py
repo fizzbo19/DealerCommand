@@ -12,9 +12,10 @@ if not st.session_state.get("authenticated"):
     st.stop()
 
 st.title("🎥 Caption Generator")
-make = st.text_input("Car make (for caption)")
+
+make = st.text_input("Car make")
 model = st.text_input("Car model")
-desc = st.text_area("Short prompt (e.g. highlight, features, vibe)")
+desc = st.text_area("Short prompt (highlight, features, vibe)")
 
 if st.button("Generate Caption"):
     if not desc:
@@ -22,8 +23,8 @@ if st.button("Generate Caption"):
     else:
         try:
             caption = generate_caption({"make": make, "model": model, "desc": desc})
-            st.markdown("**Suggested caption:**")
+            st.markdown("**Suggested Caption:**")
             st.write(caption)
-            st.download_button("⬇ Download caption", caption, file_name="caption.txt")
+            st.download_button("⬇️ Download Caption", caption, file_name="caption.txt")
         except Exception as e:
             st.error(f"Caption generation failed: {e}")

@@ -1,20 +1,18 @@
 import sys
 import os
-import json
 from datetime import datetime
 
 import streamlit as st
 from openai import OpenAI
 
-# Add backend path so imports work when running Streamlit
+# Backend path for imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-# ----------------------
 # Backend Imports
-# ----------------------
 from backend.trial_manager import ensure_user_and_get_status, increment_usage
 from backend.sheet_utils import append_to_google_sheet
 from backend.stripe_utils import create_checkout_session
+
 
 # ----------------------
 # Streamlit UI Config
@@ -22,12 +20,10 @@ from backend.stripe_utils import create_checkout_session
 st.set_page_config(page_title="🚗 DealerCommand AI", layout="centered")
 st.title("🚗 DealerCommand AI - Premium Trial")
 
-st.markdown(
-    """
+st.markdown("""
 Welcome to **DealerCommand** — your AI-powered assistant for creating professional, high-converting car listings.  
 Enjoy a **3-month premium trial** with full access to all tools before choosing a plan.
-"""
-)
+""")
 
 # ----------------------
 # User Inputs
@@ -36,17 +32,14 @@ user_email = st.text_input("Enter your dealership email to start your trial", ""
 api_key = st.text_input("Enter your OpenAI API key", type="password")
 
 if user_email:
-    # Get user trial info
+    # Get trial info
     status, expiry, usage_count = ensure_user_and_get_status(user_email)
     is_active = status in ["active", "new"]
 
     if is_active:
-        st.success(
-            f"🎉 You’re in your 3-month premium trial! "
-            f"Trial ends on: **{expiry}** — Listings used: **{usage_count}**"
-        )
+        st.success(f"🎉 Your 3-month premium trial is active! Trial ends: **{expiry}** — Listings used: **{usage_count}**")
     else:
-        st.warning("⚠️ Your trial has ended. Please upgrade to continue generating listings.")
+        st.warning("⚠️ Your trial has ended. Please upgrade to continue.")
         if st.button("💳 Upgrade Now"):
             try:
                 checkout_url = create_checkout_session(user_email)
@@ -82,7 +75,7 @@ if user_email:
                     # AI Prompt
                     prompt = f"""
 You are an expert automotive marketing assistant. 
-Write a professional and engaging listing for a car with the following details:
+Write a professional, engaging listing for this car:
 
 Make: {make}
 Model: {model}
@@ -97,12 +90,12 @@ Dealer Notes: {notes}
 
 Guidelines:
 - 100–150 words
-- Highlight the top 3 selling points
-- Keep the tone friendly yet persuasive
-- Use emojis appropriately to make it engaging
+- Highlight top 3 selling points
+- Friendly yet persuasive tone
+- Include relevant emojis
 """
 
-                    with st.spinner("🤖 Generating your car listing..."):
+                    with st.spinner("🤖 Generating your listing..."):
                         response = client.chat.completions.create(
                             model="gpt-4o-mini",
                             messages=[
@@ -118,7 +111,7 @@ Guidelines:
                     st.markdown(listing)
                     st.download_button("⬇️ Download Listing", listing, file_name="car_listing.txt")
 
-                    # Save to Sheets
+                    # Save to Google Sheets
                     car_data = {
                         "Make": make,
                         "Model": model,
@@ -134,10 +127,9 @@ Guidelines:
                     append_to_google_sheet(user_email, car_data)
                     increment_usage(user_email, listing)
 
-                    st.success("✅ Listing generated and recorded successfully!")
+                    st.success("✅ Listing generated and saved successfully!")
 
                 except Exception as e:
-                    st.error(f"⚠️ Error while generating listing: {e}")
+                    st.error(f"⚠️ Error generating listing: {e}")
 else:
     st.info("👋 Enter your dealership email above to begin your 3-month premium trial.")
-
