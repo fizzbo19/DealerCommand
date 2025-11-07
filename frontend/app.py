@@ -1,64 +1,65 @@
 # frontend/app.py
-import sys, os
+import sys, os, json
 from datetime import datetime
 import streamlit as st
 from openai import OpenAI
 
-# Add backend path
+# Local imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from backend.trial_manager import ensure_user_and_get_status, increment_usage
 from backend.sheet_utils import append_to_google_sheet
 from backend.stripe_utils import create_checkout_session
 
-# ----------------------
-# Page Setup
-# ----------------------
+# Optional (if you add animation later)
+try:
+    from streamlit_lottie import st_lottie
+except ImportError:
+    st_lottie = None
 
-st.image("frontend/assets/dealercommand_logo.png", width=180)
-
+# ----------------------
+# PAGE CONFIG
+# ----------------------
 st.set_page_config(
     page_title="DealerCommand AI | Smart Automotive Listings",
     layout="wide",
     page_icon="🚗"
 )
 
-# Inject Custom CSS
+# ----------------------
+# BRANDING HEADER
+# ----------------------
+st.markdown("""
+<div style="display:flex; justify-content:center; align-items:center; margin-top:1rem; margin-bottom:1rem;">
+    <img src="https://raw.githubusercontent.com/yourusername/dealercommand/main/frontend/assets/dealercommand_logo.png" 
+         alt="DealerCommand AI Logo" width="200" style="border-radius:8px;">
+</div>
+""", unsafe_allow_html=True)
+
+# ----------------------
+# CUSTOM CSS
+# ----------------------
 st.markdown("""
 <style>
-/* General body styling */
 body {
     background-color: #f9fafb;
     color: #111827;
     font-family: 'Inter', sans-serif;
 }
-
-/* Main container */
 .main {
-    padding-top: 1rem;
-    padding-bottom: 2rem;
+    padding-top: 0rem;
 }
-
-/* Hero section */
 .hero-title {
-    font-size: 2.6rem;
+    font-size: 2.4rem;
     font-weight: 700;
     text-align: center;
     color: #111827;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.4rem;
 }
 .hero-sub {
     text-align: center;
     color: #6b7280;
     font-size: 1.1rem;
     margin-bottom: 2.5rem;
-}
-
-/* Input boxes and buttons */
-.stTextInput > div > div > input {
-    border-radius: 10px;
-    border: 1px solid #e5e7eb;
-    padding: 10px;
 }
 .stButton > button {
     background: linear-gradient(90deg, #2563eb, #1e40af);
@@ -79,26 +80,6 @@ body {
     border-radius: 8px;
     font-weight: 500;
 }
-
-/* Cards */
-.block-container {
-    max-width: 900px;
-    margin: auto;
-}
-
-/* Success / Warning Styling */
-.stSuccess {
-    background-color: #ecfdf5;
-    border-left: 4px solid #10b981;
-    color: #065f46;
-}
-.stWarning {
-    background-color: #fff7ed;
-    border-left: 4px solid #f59e0b;
-    color: #78350f;
-}
-
-/* Footer */
 .footer {
     text-align: center;
     color: #9ca3af;
@@ -109,13 +90,13 @@ body {
 """, unsafe_allow_html=True)
 
 # ----------------------
-# Hero Section
+# HERO SECTION
 # ----------------------
 st.markdown('<div class="hero-title">🚗 DealerCommand AI</div>', unsafe_allow_html=True)
 st.markdown('<div class="hero-sub">Create high-converting, SEO-optimised car listings in seconds with AI.</div>', unsafe_allow_html=True)
 
 # ----------------------
-# Main Logic
+# MAIN LOGIC
 # ----------------------
 user_email = st.text_input("📧 Dealership email", placeholder="e.g. sales@autohub.co.uk")
 api_key = os.environ.get("OPENAI_API_KEY")
@@ -128,30 +109,52 @@ if user_email:
     status, expiry, usage_count = ensure_user_and_get_status(user_email)
     is_active = status in ["active", "new"]
 
-    if is_active:
-        st.success(f"🎉 Trial Active — Ends: **{expiry}** | Listings Used: **{usage_count}**")
-    else:
-        st.warning("⚠️ Trial expired. Upgrade to continue.")
-        if st.button("💳 Upgrade Now"):
-            try:
-                checkout_url = create_checkout_session(user_email)
-                st.markdown(f"[👉 Upgrade to Pro]({checkout_url})", unsafe_allow_html=True)
-            except Exception as e:
-                st.error(f"Payment error: {e}")
+    # ----------------------
+    # SIDEBAR DASHBOARD
+    # ----------------------
+    st.sidebar.image("frontend/assets/dealercommand_logo.png", width=160)
+    st.sidebar.title("⚙️ Dashboard")
+
+    st.sidebar.markdown(f"**👤 User:** {user_email}")
+    st.sidebar.markdown(f"**📅 Trial Ends:** {expiry}")
+    st.sidebar.markdown(f"**📊 Listings Used:** {usage_count} / 15")
+
+    usage_percent = min((usage_count / 15) * 100, 100)
+    st.sidebar.progress(int(usage_percent))
 
     if is_active:
+        st.sidebar.markdown('<span style="color:#10b981;">🟢 Trial Active</span>', unsafe_allow_html=True)
+    else:
+        st.sidebar.markdown('<span style="color:#ef4444;">🔴 Trial Expired</span>', unsafe_allow_html=True)
+        if st.sidebar.button("💳 Upgrade Plan"):
+            checkout_url = create_checkout_session(user_email)
+            st.sidebar.markdown(f"[👉 Upgrade to Pro]({checkout_url})", unsafe_allow_html=True)
+
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("💬 **Need help?** [Contact support](mailto:support@dealercommand.ai)")
+
+    # ----------------------
+    # MAIN CONTENT
+    # ----------------------
+    if is_active:
+        st.markdown("### 🧾 Generate a New Listing")
+        st.caption("Complete the details below and let AI handle the rest.")
+
         with st.form("listing_form"):
-            st.subheader("🧾 Generate New Car Listing")
-            make = st.text_input("Car Make", "BMW")
-            model = st.text_input("Model", "X5 M Sport")
-            year = st.text_input("Year", "2021")
-            mileage = st.text_input("Mileage", "28,000 miles")
-            color = st.text_input("Color", "Black")
-            fuel = st.selectbox("Fuel Type", ["Petrol", "Diesel", "Hybrid", "Electric"])
-            transmission = st.selectbox("Transmission", ["Automatic", "Manual"])
-            price = st.text_input("Price", "£45,995")
-            features = st.text_area("Key Features", "Panoramic roof, heated seats, M Sport package")
-            notes = st.text_area("Dealer Notes (optional)", "Full service history, finance available")
+            col1, col2 = st.columns(2)
+            with col1:
+                make = st.text_input("Car Make", "BMW")
+                model = st.text_input("Model", "X5 M Sport")
+                year = st.text_input("Year", "2021")
+                mileage = st.text_input("Mileage", "28,000 miles")
+                color = st.text_input("Color", "Black")
+            with col2:
+                fuel = st.selectbox("Fuel Type", ["Petrol", "Diesel", "Hybrid", "Electric"])
+                transmission = st.selectbox("Transmission", ["Automatic", "Manual"])
+                price = st.text_input("Price", "£45,995")
+                features = st.text_area("Key Features", "Panoramic roof, heated seats, M Sport package")
+                notes = st.text_area("Dealer Notes (optional)", "Full service history, finance available")
+
             submitted = st.form_submit_button("✨ Generate Listing")
 
         if submitted:
@@ -178,7 +181,13 @@ Guidelines:
 - Add relevant emojis
 - Optimised for online car marketplaces
 """
+
                 with st.spinner("🤖 Generating your listing..."):
+                    if st_lottie and os.path.exists("frontend/assets/ai_loading.json"):
+                        with open("frontend/assets/ai_loading.json", "r") as f:
+                            lottie_ai = json.load(f)
+                        st_lottie(lottie_ai, height=120, key="ai_loading")
+
                     response = client.chat.completions.create(
                         model="gpt-4o-mini",
                         messages=[
@@ -193,6 +202,7 @@ Guidelines:
                 st.markdown(f"### 📋 Your AI-Optimised Listing\n\n{listing}")
                 st.download_button("⬇ Download Listing", listing, file_name="listing.txt")
 
+                # Save user data
                 car_data = {
                     "Make": make, "Model": model, "Year": year, "Mileage": mileage,
                     "Color": color, "Fuel Type": fuel, "Transmission": transmission,
@@ -203,10 +213,17 @@ Guidelines:
 
             except Exception as e:
                 st.error(f"⚠️ Error: {e}")
+
+    else:
+        st.warning("⚠️ Your trial has ended. Please upgrade to continue.")
+        if st.button("💳 Upgrade Now"):
+            checkout_url = create_checkout_session(user_email)
+            st.markdown(f"[👉 Click here to upgrade your plan]({checkout_url})", unsafe_allow_html=True)
+
 else:
-    st.info("👋 Enter your email to begin your 3-month premium trial.")
+    st.info("👋 Enter your dealership email above to begin your 3-month premium trial.")
 
 # ----------------------
-# Footer
+# FOOTER
 # ----------------------
 st.markdown('<div class="footer">© 2025 DealerCommand AI — Powered by Carfundo</div>', unsafe_allow_html=True)
