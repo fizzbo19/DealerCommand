@@ -26,21 +26,22 @@ st.set_page_config(
 )
 
 # ----------------------
+# ASSETS PATHS & LOGO
 # ----------------------
-# BRANDING HEADER & LOGO
-# ----------------------
-
-# Resolve paths safely
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
 LOGO_FILE = os.path.join(ASSETS_DIR, "dealercommand_logov1.png")
 
-# Sidebar Logo
+# ----------------------
+# SIDEBAR LOGO
+# ----------------------
 if os.path.exists(LOGO_FILE):
     st.sidebar.image(LOGO_FILE, width=160, caption="DealerCommand AI")
 else:
     st.sidebar.markdown("**DealerCommand AI**")  # fallback text
 
-# Hero Logo (centered)
+# ----------------------
+# HERO LOGO
+# ----------------------
 if os.path.exists(LOGO_FILE):
     st.markdown(f"""
     <div style="display:flex; justify-content:center; align-items:center; margin-top:1rem; margin-bottom:1rem;">
@@ -50,10 +51,11 @@ if os.path.exists(LOGO_FILE):
 else:
     st.markdown('<h2 style="text-align:center;">🚗 DealerCommand AI</h2>', unsafe_allow_html=True)
 
-# Hero Title & Subtitle
+# ----------------------
+# HERO TITLE & SUBTITLE
+# ----------------------
 st.markdown('<div class="hero-title">🚗 DealerCommand AI</div>', unsafe_allow_html=True)
 st.markdown('<div class="hero-sub">Create high-converting, SEO-optimised car listings in seconds with AI.</div>', unsafe_allow_html=True)
-
 
 # ----------------------
 # CUSTOM CSS
@@ -110,12 +112,6 @@ body {
 """, unsafe_allow_html=True)
 
 # ----------------------
-# HERO SECTION
-# ----------------------
-st.markdown('<div class="hero-title">🚗 DealerCommand AI</div>', unsafe_allow_html=True)
-st.markdown('<div class="hero-sub">Create high-converting, SEO-optimised car listings in seconds with AI.</div>', unsafe_allow_html=True)
-
-# ----------------------
 # MAIN LOGIC
 # ----------------------
 user_email = st.text_input("📧 Dealership email", placeholder="e.g. sales@autohub.co.uk")
@@ -132,13 +128,10 @@ if user_email:
     # ----------------------
     # SIDEBAR DASHBOARD
     # ----------------------
-    st.sidebar.image("frontend/assets/dealercommand_logo.png", width=160)
     st.sidebar.title("⚙️ Dashboard")
-
     st.sidebar.markdown(f"**👤 User:** {user_email}")
     st.sidebar.markdown(f"**📅 Trial Ends:** {expiry}")
     st.sidebar.markdown(f"**📊 Listings Used:** {usage_count} / 15")
-
     usage_percent = min((usage_count / 15) * 100, 100)
     st.sidebar.progress(int(usage_percent))
 
@@ -201,10 +194,9 @@ Guidelines:
 - Add relevant emojis
 - Optimised for online car marketplaces
 """
-
                 with st.spinner("🤖 Generating your listing..."):
-                    if st_lottie and os.path.exists("frontend/assets/ai_loading.json"):
-                        with open("frontend/assets/ai_loading.json", "r") as f:
+                    if st_lottie and os.path.exists(os.path.join(ASSETS_DIR, "ai_loading.json")):
+                        with open(os.path.join(ASSETS_DIR, "ai_loading.json"), "r") as f:
                             lottie_ai = json.load(f)
                         st_lottie(lottie_ai, height=120, key="ai_loading")
 
@@ -222,7 +214,6 @@ Guidelines:
                 st.markdown(f"### 📋 Your AI-Optimised Listing\n\n{listing}")
                 st.download_button("⬇ Download Listing", listing, file_name="listing.txt")
 
-                # Save user data
                 car_data = {
                     "Make": make, "Model": model, "Year": year, "Mileage": mileage,
                     "Color": color, "Fuel Type": fuel, "Transmission": transmission,
@@ -233,7 +224,6 @@ Guidelines:
 
             except Exception as e:
                 st.error(f"⚠️ Error: {e}")
-
     else:
         st.warning("⚠️ Your trial has ended. Please upgrade to continue.")
         if st.button("💳 Upgrade Now"):
