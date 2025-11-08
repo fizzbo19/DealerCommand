@@ -26,14 +26,34 @@ st.set_page_config(
 )
 
 # ----------------------
-# BRANDING HEADER
 # ----------------------
-st.markdown("""
-<div style="display:flex; justify-content:center; align-items:center; margin-top:1rem; margin-bottom:1rem;">
-    <img src="frontend/assets/dealercommand_logov1.png" 
-     alt="DealerCommand AI Logo" width="200" style="border-radius:8px;">
-</div>
-""", unsafe_allow_html=True)
+# BRANDING HEADER & LOGO
+# ----------------------
+
+# Resolve paths safely
+ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
+LOGO_FILE = os.path.join(ASSETS_DIR, "dealercommand_logov1.png")
+
+# Sidebar Logo
+if os.path.exists(LOGO_FILE):
+    st.sidebar.image(LOGO_FILE, width=160, caption="DealerCommand AI")
+else:
+    st.sidebar.markdown("**DealerCommand AI**")  # fallback text
+
+# Hero Logo (centered)
+if os.path.exists(LOGO_FILE):
+    st.markdown(f"""
+    <div style="display:flex; justify-content:center; align-items:center; margin-top:1rem; margin-bottom:1rem;">
+        <img src="{LOGO_FILE}" alt="DealerCommand AI Logo" width="200" style="border-radius:12px;"/>
+    </div>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown('<h2 style="text-align:center;">🚗 DealerCommand AI</h2>', unsafe_allow_html=True)
+
+# Hero Title & Subtitle
+st.markdown('<div class="hero-title">🚗 DealerCommand AI</div>', unsafe_allow_html=True)
+st.markdown('<div class="hero-sub">Create high-converting, SEO-optimised car listings in seconds with AI.</div>', unsafe_allow_html=True)
+
 
 # ----------------------
 # CUSTOM CSS
