@@ -6,12 +6,11 @@ from openai import OpenAI
 import numpy as np
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 
 # Local imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from backend.trial_manager import ensure_user_and_get_status, increment_usage
-from backend.sheet_utils import append_to_google_sheet, get_sheet_data
+from backend.sheet_utils import append_to_google_sheet, get_user_activity_data
 from backend.stripe_utils import create_checkout_session
 
 # ----------------------
@@ -50,59 +49,16 @@ st.markdown('<div class="hero-sub">Create high-converting, SEO-optimised car lis
 # ----------------------
 st.markdown("""
 <style>
-body {
-    background-color: #f9fafb;
-    color: #111827;
-    font-family: 'Inter', sans-serif;
-}
-.main {
-    padding-top: 0rem;
-}
-.hero-title {
-    font-size: 2.4rem;
-    font-weight: 700;
-    text-align: center;
-    color: #111827;
-    margin-bottom: 0.4rem;
-}
-.hero-sub {
-    text-align: center;
-    color: #6b7280;
-    font-size: 1.1rem;
-    margin-bottom: 2.5rem;
-}
-.stButton > button {
-    background: linear-gradient(90deg, #2563eb, #1e40af);
-    color: white;
-    border-radius: 10px;
-    padding: 0.6rem 1.4rem;
-    font-weight: 600;
-    border: none;
-    transition: 0.2s ease-in-out;
-}
-.stButton > button:hover {
-    background: linear-gradient(90deg, #1e40af, #2563eb);
-    transform: scale(1.02);
-}
-.stDownloadButton > button {
-    background: #10b981;
-    color: white;
-    border-radius: 8px;
-    font-weight: 500;
-}
-.footer {
-    text-align: center;
-    color: #9ca3af;
-    font-size: 0.9rem;
-    margin-top: 3rem;
-}
-[data-testid="stMetricValue"] {
-    color: #1d4ed8 !important;
-    font-weight: 700 !important;
-}
-[data-testid="stMetricLabel"] {
-    color: #6b7280 !important;
-}
+body { background-color: #f9fafb; color: #111827; font-family: 'Inter', sans-serif; }
+.main { padding-top: 0rem; }
+.hero-title { font-size: 2.4rem; font-weight: 700; text-align: center; color: #111827; margin-bottom: 0.4rem; }
+.hero-sub { text-align: center; color: #6b7280; font-size: 1.1rem; margin-bottom: 2.5rem; }
+.stButton > button { background: linear-gradient(90deg, #2563eb, #1e40af); color: white; border-radius: 10px; padding: 0.6rem 1.4rem; font-weight: 600; border: none; transition: 0.2s ease-in-out; }
+.stButton > button:hover { background: linear-gradient(90deg, #1e40af, #2563eb); transform: scale(1.02); }
+.stDownloadButton > button { background: #10b981; color: white; border-radius: 8px; font-weight: 500; }
+.footer { text-align: center; color: #9ca3af; font-size: 0.9rem; margin-top: 3rem; }
+[data-testid="stMetricValue"] { color: #1d4ed8 !important; font-weight: 700 !important; }
+[data-testid="stMetricLabel"] { color: #6b7280 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -143,7 +99,7 @@ if user_email:
     st.sidebar.markdown("💬 **Need help?** [Contact support](mailto:support@dealercommand.ai)")
 
     # ----------------------
-    # MAIN CONTENT
+    # MAIN CONTENT - LISTING FORM
     # ----------------------
     if is_active:
         st.markdown("### 🧾 Generate a New Listing")
@@ -213,8 +169,18 @@ Guidelines:
                     "Model": "gpt-4o-mini",
                     "Response Time (s)": round(duration, 2),
                     "Prompt Length": len(prompt),
+                    "Make": make,
+                    "Model Name": model,
+                    "Year": year,
+                    "Mileage": mileage,
+                    "Color": color,
+                    "Fuel Type": fuel,
+                    "Transmission": transmission,
+                    "Price": price,
+                    "Features": features,
+                    "Dealer Notes": notes
                 }
-                append_to_google_sheet("AI_Metrics", ai_metrics)
+                append_to_google_sheet(user_email, ai_metrics)
                 increment_usage(user_email, listing)
 
             except Exception as e:
@@ -224,23 +190,18 @@ Guidelines:
         # 🧠 AI PERFORMANCE INSIGHTS
         # ----------------------
         st.markdown("### 🤖 AI Performance Insights")
-
-        avg_gen_time = np.random.uniform(3.5, 8.0)
-        success_rate = np.random.uniform(85, 100)
-        avg_prompt_len = np.random.uniform(180, 350)
-        current_model = "gpt-4o-mini"
-
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("⚡ Avg Generation Time", f"{avg_gen_time:.1f}s")
-        col2.metric("✅ Success Rate", f"{success_rate:.1f}%")
-        col3.metric("🧠 Avg Prompt Length", f"{avg_prompt_len:.0f} tokens")
-        col4.metric("🪄 Model", current_model)
+        col1.metric("⚡ Avg Generation Time", f"{np.random.uniform(3.5, 8.0):.1f}s")
+        col2.metric("✅ Success Rate", f"{np.random.uniform(85, 100):.1f}%")
+        col3.metric("🧠 Avg Prompt Length", f"{np.random.uniform(180, 350):.0f} tokens")
+        col4.metric("🪄 Model", "gpt-4o-mini")
 
         # ----------------------
         # 🏆 DEALER LEADERBOARD WITH DEMO + GET FEATURED
         # ----------------------
         st.markdown("### 🏆 Dealer Leaderboard")
 
+        # Demo fallback
         demo_data = pd.DataFrame([
             {"Email": "sales@autohauselite.com", "Listings Generated": 52, "Avg Response Time (s)": 4.8, "Avg Prompt Length": 240, "Status": "✅ Verified Partner"},
             {"Email": "info@carplanet.co.uk", "Listings Generated": 39, "Avg Response Time (s)": 5.1, "Avg Prompt Length": 220, "Status": "✅ Verified Partner"},
@@ -250,12 +211,13 @@ Guidelines:
         ])
 
         try:
-            leaderboard_df = get_sheet_data("AI_Metrics")
+            # Fetch real data
+            leaderboard_df = get_user_activity_data(user_email)
             if leaderboard_df.empty:
                 st.info("Showing demo leaderboard (no live dealer data yet).")
                 leaderboard_df = demo_data
             else:
-                leaderboard_df["Date"] = pd.to_datetime(leaderboard_df["Timestamp"]).dt.date
+                leaderboard_df["Date"] = pd.to_datetime(leaderboard_df["Timestamp"], errors="coerce").dt.date
                 dealer_stats = leaderboard_df.groupby("Email").agg({
                     "Response Time (s)": "mean",
                     "Prompt Length": "mean",
@@ -269,9 +231,12 @@ Guidelines:
                 dealer_stats.sort_values("Listings Generated", ascending=False, inplace=True)
                 leaderboard_df = dealer_stats
 
-            # ----------------------
+            # Ensure numeric types
+            leaderboard_df["Listings Generated"] = pd.to_numeric(leaderboard_df["Listings Generated"], errors="coerce").fillna(0)
+            leaderboard_df["Avg Response Time (s)"] = pd.to_numeric(leaderboard_df["Avg Response Time (s)"], errors="coerce").fillna(0)
+            leaderboard_df["Avg Prompt Length"] = pd.to_numeric(leaderboard_df["Avg Prompt Length"], errors="coerce").fillna(0)
+
             # GET FEATURED BUTTON
-            # ----------------------
             st.markdown("#### Want to be featured on the leaderboard?")
             if st.button("💎 Get Featured"):
                 featured_data = {
@@ -282,14 +247,14 @@ Guidelines:
                     "Status": "Pending Verification",
                     "Timestamp": datetime.now().isoformat()
                 }
-                append_to_google_sheet("AI_Metrics", featured_data)
+                append_to_google_sheet(user_email, featured_data)
                 st.balloons()
                 st.success("🎉 Your request to be featured has been submitted! You’ll appear on the leaderboard immediately.")
 
                 # Add locally for live display
                 leaderboard_df = pd.concat([leaderboard_df, pd.DataFrame([featured_data])], ignore_index=True)
 
-            # Highlight current user in gold
+            # Highlight current user
             def highlight_current_user(row):
                 return ['background-color: #FFD700' if row.Email == user_email else '' for _ in row]
 

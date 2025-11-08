@@ -1,6 +1,7 @@
 # backend/sheet_utils.py
 import os
 import json
+import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -23,8 +24,10 @@ def get_sheet():
         info = json.loads(raw)
         creds = Credentials.from_service_account_info(
             info,
-            scopes=["https://www.googleapis.com/auth/spreadsheets",
-                    "https://www.googleapis.com/auth/drive"]
+            scopes=[
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/drive"
+            ]
         )
         client = gspread.authorize(creds)
         sheet = client.open_by_url(SHEET_URL).sheet1
@@ -34,11 +37,11 @@ def get_sheet():
         return None
 
 # ----------------------
-# Append a new car listing
+# Append a new record to the sheet
 # ----------------------
 def append_to_google_sheet(email, data_dict):
     """
-    Appends a single car listing to the main sheet.
+    Appends a row of data to the main sheet.
     Returns True if successful, False otherwise.
     """
     sheet = get_sheet()
@@ -46,17 +49,22 @@ def append_to_google_sheet(email, data_dict):
         return False
     try:
         row = [
-            email,
-            data_dict.get("Make"),
-            data_dict.get("Model"),
-            data_dict.get("Year"),
-            data_dict.get("Mileage"),
-            data_dict.get("Color"),
-            data_dict.get("Fuel Type"),
-            data_dict.get("Transmission"),
-            data_dict.get("Price"),
-            data_dict.get("Features"),
-            data_dict.get("Dealer Notes"),
+            data_dict.get("Email", email),
+            data_dict.get("Make", ""),
+            data_dict.get("Model Name", ""),
+            data_dict.get("Year", ""),
+            data_dict.get("Mileage", ""),
+            data_dict.get("Color", ""),
+            data_dict.get("Fuel Type", ""),
+            data_dict.get("Transmission", ""),
+            data_dict.get("Price", ""),
+            data_dict.get("Features", ""),
+            data_dict.get("Dealer Notes", ""),
+            data_dict.get("Listings Generated", 0),
+            data_dict.get("Avg Response Time (s)", 0),
+            data_dict.get("Avg Prompt Length", 0),
+            data_dict.get("Status", "Pending Verification"),
+            data_dict.get("Timestamp", pd.Timestamp.now().isoformat())
         ]
         sheet.append_row(row)
         return True
@@ -65,52 +73,41 @@ def append_to_google_sheet(email, data_dict):
         return False
 
 # ----------------------
-# Append to listing history
+# Fetch leaderboard / user activity data
 # ----------------------
-def append_listing_history(email, date, car_text, price, tone, listing_snippet):
+def get_user_activity_data(user_email=None):
     """
-    Appends a summary of the listing to a 'Listings History' sheet.
-    Returns True if successful, False otherwise.
+    Fetches all leaderboard metrics from Google Sheet.
+    If user_email is provided, filters to that user as well.
+    Returns a pandas DataFrame.
     """
     sheet = get_sheet()
     if not sheet:
-        return False
-    try:
-        ss = sheet.spreadsheet
-        try:
-            history_ws = ss.worksheet("Listings History")
-        except gspread.exceptions.WorksheetNotFound:
-            history_ws = ss.add_worksheet(
-                title="Listings History", rows=2000, cols=6
-            )
-            history_ws.append_row(["Email", "Date", "Car", "Price", "Tone", "Listing"])
+        return pd.DataFrame()
 
-        history_ws.append_row([email, date, car_text, price, tone, listing_snippet])
-        return True
-    except Exception as e:
-        print(f"⚠️ Could not append to history: {e}")
-        return False
-    
-    import pandas as pd
-
-def get_user_activity_data(user_email):
-    """Pull listing activity from Google Sheets for analytics."""
     try:
-        import gspread
-        from oauth2client.service_account import ServiceAccountCredentials
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name("gcp_credentials.json", scope)
-        client = gspread.authorize(creds)
-        sheet = client.open_by_key(os.environ.get("GOOGLE_SHEET_ID")).sheet1
         records = sheet.get_all_records()
-
         df = pd.DataFrame(records)
-        if "Email" in df.columns:
+
+        # Ensure all necessary columns exist
+        for col in ["Email", "Listings Generated", "Avg Response Time (s)", "Avg Prompt Length", "Status", "Timestamp"]:
+            if col not in df.columns:
+                df[col] = 0 if "Avg" in col or "Listings" in col else ""
+
+        # Convert numeric columns
+        df["Listings Generated"] = pd.to_numeric(df["Listings Generated"], errors="coerce").fillna(0)
+        df["Avg Response Time (s)"] = pd.to_numeric(df["Avg Response Time (s)"], errors="coerce").fillna(0)
+        df["Avg Prompt Length"] = pd.to_numeric(df["Avg Prompt Length"], errors="coerce").fillna(0)
+
+        # Parse Timestamp
+        df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
+
+        if user_email:
             df = df[df["Email"] == user_email]
-        if "Timestamp" not in df.columns:
-            df["Timestamp"] = pd.Timestamp.now()
+
         return df
+
     except Exception as e:
-        print("Error fetching sheet data:", e)
+        print(f"⚠️ Error fetching sheet data: {e}")
         return pd.DataFrame()
 
