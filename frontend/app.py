@@ -1,6 +1,5 @@
-# frontend/app.py
 import sys, os, json, time
-from datetime import datetime
+from datetime import datetime, date
 import streamlit as st
 from openai import OpenAI
 import numpy as np
@@ -209,7 +208,47 @@ Guidelines:
     # SOCIAL MEDIA ANALYTICS
     # ----------------------
     with tabs[1]:
+        if not is_active:
+            st.warning("⚠️ Your trial has ended. Upgrade to access analytics.")
+            st.stop()
+
         st.markdown("### 📊 Social Media Analytics (Premium)")
+        st.markdown("#### 📱 Add Social Media Performance")
+
+        with st.form("add_social_data_form"):
+            platform = st.selectbox("Platform", ["TikTok", "Instagram", "Facebook", "YouTube", "Twitter/X", "LinkedIn"])
+            make = st.text_input("Car Make (e.g., BMW)")
+            model = st.text_input("Car Model (e.g., 1 Series)")
+            reach = st.number_input("Reach", min_value=0, step=100)
+            impressions = st.number_input("Impressions", min_value=0, step=100)
+            revenue = st.number_input("Revenue (£)", min_value=0.0, step=10.0)
+            conversions = st.number_input("Conversions", min_value=0, step=1)
+            ad_cost = st.number_input("Ad Cost (£)", min_value=0.0, step=10.0)
+            submitted = st.form_submit_button("Add Performance Record")
+
+            if submitted:
+                try:
+                    row_data = {
+                        "Email": user_email,
+                        "Date": str(date.today()),
+                        "Platform": platform,
+                        "Make": make,
+                        "Model": model,
+                        "Reach": reach,
+                        "Impressions": impressions,
+                        "Revenue": revenue,
+                        "Conversions": conversions,
+                        "Ad Cost": ad_cost
+                    }
+                    append_to_google_sheet("Social_Media", row_data)
+                    st.success("✅ Performance record added successfully!")
+                    st.experimental_rerun()
+                except Exception as e:
+                    st.error(f"❌ Error adding record: {e}")
+
+        st.markdown("---")
+        st.markdown("#### 📈 View Analytics")
+
         with st.form("sm_analytics_form"):
             sm_make = st.text_input("Filter by Make (optional)")
             sm_model = st.text_input("Filter by Model (optional)")
