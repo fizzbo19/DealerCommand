@@ -15,7 +15,7 @@ def get_sheet():
     """
     Returns the main sheet object using service account JSON from environment.
     """
-    raw = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    raw = os.environ.get("GOOGLE_CREDENTIALS")
     if not raw:
         print("⚠️ GOOGLE_CREDENTIALS_JSON not set in environment")
         return None
@@ -34,15 +34,12 @@ def get_sheet():
         print(f"⚠️ Could not connect to Google Sheet: {e}")
         return None
 
-
 # ----------------------
 # Append a row to a Google Sheet
 # ----------------------
 def append_to_google_sheet(sheet_name, data_dict):
     """
-    Appends a dictionary of data to a sheet. 
-    sheet_name: Name of the sheet (e.g., "AI_Metrics")
-    data_dict: dictionary with keys as columns
+    Appends a dictionary of data to a sheet.
     """
     sheet = get_sheet()
     if not sheet:
@@ -54,7 +51,6 @@ def append_to_google_sheet(sheet_name, data_dict):
             ws = ss.worksheet(sheet_name)
         except gspread.exceptions.WorksheetNotFound:
             ws = ss.add_worksheet(title=sheet_name, rows=2000, cols=20)
-            # add header row
             ws.append_row(list(data_dict.keys()))
         ws.append_row(list(data_dict.values()))
         return True
@@ -62,18 +58,13 @@ def append_to_google_sheet(sheet_name, data_dict):
         print(f"⚠️ Could not append to sheet {sheet_name}: {e}")
         return False
 
-
 # ----------------------
 # Append to listing history
 # ----------------------
 def append_listing_history(email, date, car_text, price, tone, listing_snippet):
-    """
-    Appends a summary of the listing to a 'Listings History' sheet.
-    """
     sheet = get_sheet()
     if not sheet:
         return False
-
     try:
         ss = sheet.spreadsheet
         try:
@@ -87,18 +78,13 @@ def append_listing_history(email, date, car_text, price, tone, listing_snippet):
         print(f"⚠️ Could not append to Listings History: {e}")
         return False
 
-
 # ----------------------
-# Get a sheet as a Pandas DataFrame
+# Fetch sheet data as DataFrame
 # ----------------------
 def get_sheet_data(sheet_name):
-    """
-    Returns the data from a given sheet as a Pandas DataFrame.
-    """
     sheet = get_sheet()
     if not sheet:
         return pd.DataFrame()
-
     try:
         ss = sheet.spreadsheet
         try:
@@ -111,14 +97,25 @@ def get_sheet_data(sheet_name):
         print(f"⚠️ Could not fetch data from {sheet_name}: {e}")
         return pd.DataFrame()
 
+# ----------------------
+# Listing history DataFrame
+# ----------------------
+def get_listing_history_df():
+    sheet = get_sheet()
+    if not sheet:
+        return pd.DataFrame()
+    try:
+        ss = sheet.spreadsheet
+        history_ws = ss.worksheet("Listings History")
+        records = history_ws.get_all_records()
+        return pd.DataFrame(records)
+    except gspread.exceptions.WorksheetNotFound:
+        return pd.DataFrame()
 
 # ----------------------
-# Get activity for a single user
+# User activity DataFrame
 # ----------------------
 def get_user_activity_data(user_email):
-    """
-    Returns a DataFrame of a user's listings from the main sheet.
-    """
     try:
         df = get_sheet_data("AI_Metrics")
         if df.empty:
@@ -132,3 +129,70 @@ def get_user_activity_data(user_email):
         print(f"⚠️ Error fetching user activity: {e}")
         return pd.DataFrame()
 
+# ----------------------
+# Social Media Data
+# ----------------------
+def get_social_media_data(sheet_name="Social_Media"):
+    """
+    Fetch social media analytics from Google Sheet or fallback to demo data.
+    Columns expected: Email, Date, Platform, Make, Model, Reach, Impressions, Revenue, Conversions, Ad Cost
+    """
+    sheet = get_sheet()
+    df = pd.DataFrame()
+    if sheet:
+        try:
+            ss = sheet.spreadsheet
+            try:
+                ws = ss.worksheet(sheet_name)
+                records = ws.get_all_records()
+                df = pd.DataFrame(records)
+            except gspread.exceptions.WorksheetNotFound:
+                # Fallback demo data
+                df = pd.DataFrame([
+                    {"Make": "BMW", "Model": "X5", "Platform": "Instagram", "Reach": 4500, "Impressions": 12000, "Revenue": 52000, "Conversions": 12, "Ad Cost": 4000, "Date": pd.Timestamp.today()},
+                    {"Make": "BMW", "Model": "X5", "Platform": "Facebook", "Reach": 4000, "Impressions": 11000, "Revenue": 48000, "Conversions": 10, "Ad Cost": 3500, "Date": pd.Timestamp.today()},
+                    {"Make": "Audi", "Model": "A3", "Platform": "Instagram", "Reach": 3000, "Impressions": 9000, "Revenue": 35000, "Conversions": 8, "Ad Cost": 2800, "Date": pd.Timestamp.today()},
+                    {"Make": "Audi", "Model": "A3", "Platform": "Facebook", "Reach": 2500, "Impressions": 8000, "Revenue": 32000, "Conversions": 6, "Ad Cost": 2500, "Date": pd.Timestamp.today()},
+                    {"Make": "VW", "Model": "Golf", "Platform": "TikTok", "Reach": 5000, "Impressions": 13000, "Revenue": 56000, "Conversions": 15, "Ad Cost": 4200, "Date": pd.Timestamp.today()},
+                ])
+        except Exception as e:
+            print(f"⚠️ Could not fetch social media data: {e}")
+    else:
+        # fallback demo
+        df = pd.DataFrame([
+            {"Make": "BMW", "Model": "X5", "Platform": "Instagram", "Reach": 4500, "Impressions": 12000, "Revenue": 52000, "Conversions": 12, "Ad Cost": 4000, "Date": pd.Timestamp.today()},
+            {"Make": "BMW", "Model": "X5", "Platform": "Facebook", "Reach": 4000, "Impressions": 11000, "Revenue": 48000, "Conversions": 10, "Ad Cost": 3500, "Date": pd.Timestamp.today()},
+            {"Make": "Audi", "Model": "A3", "Platform": "Instagram", "Reach": 3000, "Impressions": 9000, "Revenue": 35000, "Conversions": 8, "Ad Cost": 2800, "Date": pd.Timestamp.today()},
+            {"Make": "Audi", "Model": "A3", "Platform": "Facebook", "Reach": 2500, "Impressions": 8000, "Revenue": 32000, "Conversions": 6, "Ad Cost": 2500, "Date": pd.Timestamp.today()},
+            {"Make": "VW", "Model": "Golf", "Platform": "TikTok", "Reach": 5000, "Impressions": 13000, "Revenue": 56000, "Conversions": 15, "Ad Cost": 4200, "Date": pd.Timestamp.today()},
+        ])
+
+    # Ensure numeric types
+    for col in ["Reach", "Impressions", "Revenue", "Conversions", "Ad Cost"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+    # Ensure Date column
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    else:
+        df["Date"] = pd.Timestamp.today()
+
+    return df
+
+def filter_social_media(df, make=None, model=None, min_price=None, max_price=None, fuel=None):
+    """
+    Filter social media DataFrame based on dealer query.
+    """
+    filtered = df.copy()
+    if make:
+        filtered = filtered[filtered["Make"].str.lower() == make.lower()]
+    if model:
+        filtered = filtered[filtered["Model"].str.lower() == model.lower()]
+    if min_price is not None:
+        filtered = filtered[filtered["Revenue"] >= min_price]
+    if max_price is not None:
+        filtered = filtered[filtered["Revenue"] <= max_price]
+    if fuel and "Fuel" in df.columns:
+        filtered = filtered[df["Fuel"].str.lower() == fuel.lower()]
+    return filtered
