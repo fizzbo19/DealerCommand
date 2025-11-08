@@ -60,7 +60,46 @@ body { background-color: #f9fafb; color: #111827; font-family: 'Inter', sans-ser
 .footer { text-align: center; color: #9ca3af; font-size: 0.9rem; margin-top: 3rem; }
 [data-testid="stMetricValue"] { color: #1d4ed8 !important; font-weight: 700 !important; }
 [data-testid="stMetricLabel"] { color: #6b7280 !important; }
-.card { background: white; border-radius: 12px; padding: 1rem; box-shadow: 0 4px 15px rgba(0,0,0,0.08); margin-bottom: 1rem; }
+
+.card {
+    background: linear-gradient(135deg, #ffffff, #f0f4f8);
+    border-radius: 16px;
+    padding: 1.2rem;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+    margin-bottom: 1.5rem;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    position: relative;
+}
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 30px rgba(0,0,0,0.12);
+}
+.card img {
+    border-radius: 12px;
+}
+.ribbon {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    background: #10b981;
+    color: white;
+    padding: 0.4rem 1rem;
+    font-weight: 600;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+.feature-icon {
+    display: inline-block;
+    background: #2563eb;
+    color: white;
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    text-align: center;
+    line-height: 22px;
+    margin-right: 6px;
+    font-size: 14px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -182,8 +221,9 @@ Guidelines:
 
                     st.success("✅ Listing generated successfully!")
 
-                    # Premium Marketplace Card UI
+                    # Premium Marketplace Card UI with ribbon & feature icons
                     st.markdown('<div class="card">', unsafe_allow_html=True)
+                    st.markdown(f'<div class="ribbon">{price}</div>', unsafe_allow_html=True)
                     card_cols = st.columns([1,2])
                     with card_cols[0]:
                         if car_image:
@@ -192,13 +232,12 @@ Guidelines:
                             st.image("https://via.placeholder.com/300x200.png?text=Car+Image", use_column_width=True)
                     with card_cols[1]:
                         st.markdown(f"### {year} {make} {model}")
-                        st.markdown(f"**Price:** {price}")
                         st.markdown(f"**Mileage:** {mileage}")
                         st.markdown(f"**Color:** {color}")
                         st.markdown(f"**Fuel:** {fuel} | **Transmission:** {transmission}")
                         st.markdown("**Key Features:**")
                         for feat in features.split(","):
-                            st.markdown(f"- {feat.strip()}")
+                            st.markdown(f'<span class="feature-icon">✓</span>{feat.strip()}', unsafe_allow_html=True)
                         if notes:
                             st.markdown(f"**Dealer Notes:** {notes}")
                         st.markdown("**Listing Description:**")
