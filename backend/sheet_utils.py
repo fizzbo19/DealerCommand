@@ -90,3 +90,27 @@ def append_listing_history(email, date, car_text, price, tone, listing_snippet):
     except Exception as e:
         print(f"⚠️ Could not append to history: {e}")
         return False
+    
+    import pandas as pd
+
+def get_user_activity_data(user_email):
+    """Pull listing activity from Google Sheets for analytics."""
+    try:
+        import gspread
+        from oauth2client.service_account import ServiceAccountCredentials
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_name("gcp_credentials.json", scope)
+        client = gspread.authorize(creds)
+        sheet = client.open_by_key(os.environ.get("GOOGLE_SHEET_ID")).sheet1
+        records = sheet.get_all_records()
+
+        df = pd.DataFrame(records)
+        if "Email" in df.columns:
+            df = df[df["Email"] == user_email]
+        if "Timestamp" not in df.columns:
+            df["Timestamp"] = pd.Timestamp.now()
+        return df
+    except Exception as e:
+        print("Error fetching sheet data:", e)
+        return pd.DataFrame()
+
