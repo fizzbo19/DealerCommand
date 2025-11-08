@@ -99,7 +99,7 @@ if user_email:
     st.sidebar.markdown("💬 **Need help?** [Contact support](mailto:support@dealercommand.ai)")
 
     # ----------------------
-    # MAIN CONTENT - LISTING FORM
+    # LISTING FORM
     # ----------------------
     if is_active:
         st.markdown("### 🧾 Generate a New Listing")
@@ -180,14 +180,14 @@ Guidelines:
                     "Features": features,
                     "Dealer Notes": notes
                 }
-                append_to_google_sheet(user_email, ai_metrics)
+                append_to_google_sheet("AI_Metrics", ai_metrics)
                 increment_usage(user_email, listing)
 
             except Exception as e:
                 st.error(f"⚠️ Error: {e}")
 
         # ----------------------
-        # 🧠 AI PERFORMANCE INSIGHTS
+        # AI PERFORMANCE INSIGHTS
         # ----------------------
         st.markdown("### 🤖 AI Performance Insights")
         col1, col2, col3, col4 = st.columns(4)
@@ -197,11 +197,10 @@ Guidelines:
         col4.metric("🪄 Model", "gpt-4o-mini")
 
         # ----------------------
-        # 🏆 DEALER LEADERBOARD WITH DEMO + GET FEATURED
+        # DEALER LEADERBOARD
         # ----------------------
         st.markdown("### 🏆 Dealer Leaderboard")
 
-        # Demo fallback
         demo_data = pd.DataFrame([
             {"Email": "sales@autohauselite.com", "Listings Generated": 52, "Avg Response Time (s)": 4.8, "Avg Prompt Length": 240, "Status": "✅ Verified Partner"},
             {"Email": "info@carplanet.co.uk", "Listings Generated": 39, "Avg Response Time (s)": 5.1, "Avg Prompt Length": 220, "Status": "✅ Verified Partner"},
@@ -211,8 +210,8 @@ Guidelines:
         ])
 
         try:
-            # Fetch real data
-            leaderboard_df = get_user_activity_data(user_email)
+            leaderboard_df = get_user_activity_data("AI_Metrics")
+
             if leaderboard_df.empty:
                 st.info("Showing demo leaderboard (no live dealer data yet).")
                 leaderboard_df = demo_data
@@ -231,12 +230,10 @@ Guidelines:
                 dealer_stats.sort_values("Listings Generated", ascending=False, inplace=True)
                 leaderboard_df = dealer_stats
 
-            # Ensure numeric types
             leaderboard_df["Listings Generated"] = pd.to_numeric(leaderboard_df["Listings Generated"], errors="coerce").fillna(0)
             leaderboard_df["Avg Response Time (s)"] = pd.to_numeric(leaderboard_df["Avg Response Time (s)"], errors="coerce").fillna(0)
             leaderboard_df["Avg Prompt Length"] = pd.to_numeric(leaderboard_df["Avg Prompt Length"], errors="coerce").fillna(0)
 
-            # GET FEATURED BUTTON
             st.markdown("#### Want to be featured on the leaderboard?")
             if st.button("💎 Get Featured"):
                 featured_data = {
@@ -247,14 +244,11 @@ Guidelines:
                     "Status": "Pending Verification",
                     "Timestamp": datetime.now().isoformat()
                 }
-                append_to_google_sheet(user_email, featured_data)
+                append_to_google_sheet("AI_Metrics", featured_data)
                 st.balloons()
-                st.success("🎉 Your request to be featured has been submitted! You’ll appear on the leaderboard immediately.")
-
-                # Add locally for live display
+                st.success("🎉 Your request to be featured has been submitted!")
                 leaderboard_df = pd.concat([leaderboard_df, pd.DataFrame([featured_data])], ignore_index=True)
 
-            # Highlight current user
             def highlight_current_user(row):
                 return ['background-color: #FFD700' if row.Email == user_email else '' for _ in row]
 

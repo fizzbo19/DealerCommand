@@ -16,8 +16,10 @@ def ensure_user_and_get_status(email):
         used: number of listings generated
     """
     sheet = get_sheet()
+    today = datetime.date.today()
+
     if not sheet:
-        expiry = datetime.date.today() + datetime.timedelta(days=TRIAL_DAYS)
+        expiry = today + datetime.timedelta(days=TRIAL_DAYS)
         return "new", expiry, 0
 
     records = sheet.get_all_records()
@@ -26,26 +28,32 @@ def ensure_user_and_get_status(email):
             try:
                 expiry = datetime.datetime.strptime(record.get("Trial Ends"), "%Y-%m-%d").date()
             except Exception:
-                expiry = datetime.date.today() + datetime.timedelta(days=TRIAL_DAYS)
+                expiry = today + datetime.timedelta(days=TRIAL_DAYS)
             used = int(record.get("Listings Generated", 0))
-            if datetime.date.today() > expiry:
+            if today > expiry:
                 return "expired", expiry, used
             return "active", expiry, used
 
-    # New user
-    expiry = datetime.date.today() + datetime.timedelta(days=TRIAL_DAYS)
+    # New user → append to sheet
+    expiry = today + datetime.timedelta(days=TRIAL_DAYS)
     try:
-        sheet.append_row([email, str(datetime.date.today()), str(expiry), 0])
-    except Exception:
-        pass
+        sheet.append_row([email, str(today), str(expiry), 0])
+    except Exception as e:
+        print(f"⚠️ Could not append new trial user: {e}")
     return "new", expiry, 0
 
+
+# ----------------------
+# Increment Listings Usage
+# ----------------------
 def increment_usage(email, listing_text):
     """
     Increments the listing count for a user and logs the listing to history.
     Returns True if successful, False if trial expired or update fails.
     """
     sheet = get_sheet()
+    today = datetime.date.today()
+
     if not sheet:
         return False
 
@@ -55,33 +63,39 @@ def increment_usage(email, listing_text):
             try:
                 expiry = datetime.datetime.strptime(record.get("Trial Ends"), "%Y-%m-%d").date()
             except Exception:
-                expiry = datetime.date.today() + datetime.timedelta(days=TRIAL_DAYS)
+                expiry = today + datetime.timedelta(days=TRIAL_DAYS)
 
-            if datetime.date.today() > expiry:
+            if today > expiry:
                 return False
 
             used = int(record.get("Listings Generated", 0)) + 1
             try:
+                # Update listings count
                 sheet.update_cell(i, 4, used)  # Column 4 = Listings Generated
-                append_listing_history(email, str(datetime.date.today()), "-", "-", "-", listing_text[:300])
+                # Log listing in history sheet
+                append_listing_history(email, str(today), "-", "-", "-", listing_text[:300])
                 return True
-            except Exception:
+            except Exception as e:
+                print(f"⚠️ Error updating usage: {e}")
                 return False
 
     # User not found → create new row
-    expiry = datetime.date.today() + datetime.timedelta(days=TRIAL_DAYS)
     try:
-        sheet.append_row([email, str(datetime.date.today()), str(expiry), 1])
-        append_listing_history(email, str(datetime.date.today()), "-", "-", "-", listing_text[:300])
+        sheet.append_row([email, str(today), str(today + datetime.timedelta(days=TRIAL_DAYS)), 1])
+        append_listing_history(email, str(today), "-", "-", "-", listing_text[:300])
         return True
-    except Exception:
+    except Exception as e:
+        print(f"⚠️ Could not create new user row: {e}")
         return False
 
+
+# ----------------------
+# Convenience Wrappers
+# ----------------------
 def get_trial_status(email):
-    """
-    Convenience wrapper to fetch trial status.
-    """
+    """Return trial status, expiry date, and usage count."""
     return ensure_user_and_get_status(email)
+
 
 def get_recent_user_listings(email, limit=10):
     """
@@ -94,11 +108,9 @@ def get_recent_user_listings(email, limit=10):
     ss = sheet.spreadsheet
     try:
         history = ss.worksheet("Listings History")
-    except gspread.exceptions.WorksheetNotFound:
+    except Exception:
         return []
 
     rows = history.get_all_records()
     user_rows = [r for r in rows if str(r.get("Email", "")).lower() == email.lower()]
     return user_rows[::-1][:limit]
-
-
