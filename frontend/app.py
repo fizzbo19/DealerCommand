@@ -1,5 +1,6 @@
+# frontend/app.py
 import sys, os, json, time
-from datetime import datetime, date
+from datetime import datetime
 import streamlit as st
 from openai import OpenAI
 import numpy as np
@@ -23,54 +24,55 @@ st.set_page_config(
 )
 
 # ----------------------
-# BRANDING & LOGO
+# CUSTOM CSS FOR PREMIUM FEEL
+# ----------------------
+st.markdown("""
+<style>
+body { background-color: #f9fafb; color: #111827; font-family: 'Inter', sans-serif; }
+.main { padding-top: 1rem; }
+.hero-title { font-size: 2.8rem; font-weight: 700; text-align: center; color: #111827; margin-bottom: 0.4rem; }
+.hero-sub { text-align: center; color: #6b7280; font-size: 1.2rem; margin-bottom: 2rem; }
+.stButton > button { background: linear-gradient(90deg, #2563eb, #1e40af); color: white; border-radius: 10px; padding: 0.6rem 1.4rem; font-weight: 600; border: none; transition: 0.2s ease-in-out; }
+.stButton > button:hover { background: linear-gradient(90deg, #1e40af, #2563eb); transform: scale(1.02); }
+.stDownloadButton > button { background: #10b981; color: white; border-radius: 8px; font-weight: 500; }
+.footer { text-align: center; color: #9ca3af; font-size: 0.9rem; margin-top: 3rem; }
+.card { padding:1rem; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.05); background-color:white; margin-bottom:1rem; }
+.metric-value { color: #1d4ed8 !important; font-weight:700 !important; }
+.metric-label { color: #6b7280 !important; }
+</style>
+""", unsafe_allow_html=True)
+
+# ----------------------
+# LOGO & HERO
 # ----------------------
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
 LOGO_FILE = os.path.join(ASSETS_DIR, "dealercommand_logov1.png")
 
 if os.path.exists(LOGO_FILE):
     st.sidebar.image(LOGO_FILE, width=160, caption="DealerCommand AI")
-else:
-    st.sidebar.markdown("**DealerCommand AI**")
-
-if os.path.exists(LOGO_FILE):
     st.markdown(f"""
     <div style="display:flex; justify-content:center; align-items:center; margin-top:1rem; margin-bottom:1rem;">
-        <img src="{LOGO_FILE}" alt="DealerCommand AI Logo" width="200" style="border-radius:12px;">
+        <img src="{LOGO_FILE}" alt="DealerCommand AI Logo" width="220" style="border-radius:12px;">
     </div>
     """, unsafe_allow_html=True)
 else:
+    st.sidebar.markdown("**DealerCommand AI**")
     st.markdown('<h2 style="text-align:center;">🚗 DealerCommand AI</h2>', unsafe_allow_html=True)
 
 st.markdown('<div class="hero-sub">Create high-converting, SEO-optimised car listings in seconds with AI.</div>', unsafe_allow_html=True)
 
 # ----------------------
-# CUSTOM CSS
+# OPENAI KEY CHECK
 # ----------------------
-st.markdown("""
-<style>
-body { background-color: #f9fafb; color: #111827; font-family: 'Inter', sans-serif; }
-.main { padding-top: 0rem; }
-.hero-title { font-size: 2.4rem; font-weight: 700; text-align: center; color: #111827; margin-bottom: 0.4rem; }
-.hero-sub { text-align: center; color: #6b7280; font-size: 1.1rem; margin-bottom: 2.5rem; }
-.stButton > button { background: linear-gradient(90deg, #2563eb, #1e40af); color: white; border-radius: 10px; padding: 0.6rem 1.4rem; font-weight: 600; border: none; transition: 0.2s ease-in-out; }
-.stButton > button:hover { background: linear-gradient(90deg, #1e40af, #2563eb); transform: scale(1.02); }
-.stDownloadButton > button { background: #10b981; color: white; border-radius: 8px; font-weight: 500; }
-.footer { text-align: center; color: #9ca3af; font-size: 0.9rem; margin-top: 3rem; }
-[data-testid="stMetricValue"] { color: #1d4ed8 !important; font-weight: 700 !important; }
-[data-testid="stMetricLabel"] { color: #6b7280 !important; }
-</style>
-""", unsafe_allow_html=True)
-
-# ----------------------
-# MAIN APP LOGIC
-# ----------------------
-user_email = st.text_input("📧 Dealership email", placeholder="e.g. sales@autohub.co.uk")
 api_key = os.environ.get("OPENAI_API_KEY")
-
 if not api_key:
     st.error("⚠️ Missing OpenAI key — set `OPENAI_API_KEY` in Render environment.")
     st.stop()
+
+# ----------------------
+# USER LOGIN
+# ----------------------
+user_email = st.text_input("📧 Dealership email", placeholder="e.g. sales@autohub.co.uk")
 
 if user_email:
     status, expiry, usage_count = ensure_user_and_get_status(user_email)
@@ -102,13 +104,46 @@ if user_email:
     tabs = st.tabs(["🧾 Generate Listing", "📊 Analytics Dashboard", "🏆 Dealer Leaderboard"])
 
     # ----------------------
+    # SOCIAL MEDIA FORM
+    # ----------------------
+    with st.container():
+        st.subheader("📱 Add Social Media Performance")
+        with st.form("add_social_data_form"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                email_input = st.text_input("Dealer Email")
+                date_input = st.date_input("Date", datetime.date.today())
+                platform_input = st.selectbox("Platform", ["TikTok", "Instagram", "Facebook", "YouTube", "Twitter/X", "LinkedIn"])
+            with col2:
+                make_input = st.text_input("Car Make (e.g., BMW)")
+                model_input = st.text_input("Car Model (e.g., 1 Series)")
+                reach_input = st.number_input("Reach", min_value=0, step=100)
+            with col3:
+                impressions_input = st.number_input("Impressions", min_value=0, step=100)
+                revenue_input = st.number_input("Revenue (£)", min_value=0.0, step=10.0)
+                conversions_input = st.number_input("Conversions", min_value=0, step=1)
+                ad_cost_input = st.number_input("Ad Cost (£)", min_value=0.0, step=10.0)
+
+            submitted = st.form_submit_button("Add Performance Record")
+            if submitted:
+                try:
+                    row_data = [
+                        email_input, str(date_input), platform_input,
+                        make_input, model_input,
+                        reach_input, impressions_input, revenue_input,
+                        conversions_input, ad_cost_input
+                    ]
+                    append_to_google_sheet("Social_Media", row_data)
+                    st.success("✅ Performance record added successfully!")
+                except Exception as e:
+                    st.error(f"❌ Error adding record: {e}")
+
+    # ----------------------
     # LISTING GENERATOR
     # ----------------------
     with tabs[0]:
         if is_active:
-            st.markdown("### 🧾 Generate a New Listing")
-            st.caption("Complete the details below and let AI handle the rest.")
-
+            st.markdown('<div class="card"><h3>🧾 Generate a New Listing</h3><p>Complete the details below and let AI handle the rest.</p></div>', unsafe_allow_html=True)
             with st.form("listing_form"):
                 col1, col2 = st.columns(2)
                 with col1:
@@ -125,11 +160,10 @@ if user_email:
                     notes = st.text_area("Dealer Notes (optional)", "Full service history, finance available")
 
                 submitted = st.form_submit_button("✨ Generate Listing")
-
-            if submitted:
-                try:
-                    client = OpenAI(api_key=api_key)
-                    prompt = f"""
+                if submitted:
+                    try:
+                        client = OpenAI(api_key=api_key)
+                        prompt = f"""
 You are an expert automotive marketing assistant.
 Write a professional, engaging listing for this car:
 
@@ -150,48 +184,48 @@ Guidelines:
 - Add relevant emojis
 - Optimised for online car marketplaces
 """
-                    start_time = time.time()
-                    with st.spinner("🤖 Generating your listing..."):
-                        response = client.chat.completions.create(
-                            model="gpt-4o-mini",
-                            messages=[
-                                {"role": "system", "content": "You are a top-tier automotive copywriter."},
-                                {"role": "user", "content": prompt},
-                            ],
-                            temperature=0.7,
-                        )
-                        listing = response.choices[0].message.content.strip()
+                        start_time = time.time()
+                        with st.spinner("🤖 Generating your listing..."):
+                            response = client.chat.completions.create(
+                                model="gpt-4o-mini",
+                                messages=[
+                                    {"role": "system", "content": "You are a top-tier automotive copywriter."},
+                                    {"role": "user", "content": prompt},
+                                ],
+                                temperature=0.7,
+                            )
+                            listing = response.choices[0].message.content.strip()
 
-                    duration = time.time() - start_time
-                    st.success("✅ Listing generated successfully!")
-                    st.markdown(f"### 📋 Your AI-Optimised Listing\n\n{listing}")
-                    st.download_button("⬇ Download Listing", listing, file_name="listing.txt")
+                        duration = time.time() - start_time
+                        st.success("✅ Listing generated successfully!")
+                        st.markdown(f"<div class='card'><h3>📋 Your AI-Optimised Listing</h3><p>{listing}</p></div>", unsafe_allow_html=True)
+                        st.download_button("⬇ Download Listing", listing, file_name="listing.txt")
 
-                    ai_metrics = {
-                        "Email": user_email,
-                        "Timestamp": datetime.now().isoformat(),
-                        "Model": "gpt-4o-mini",
-                        "Response Time (s)": round(duration, 2),
-                        "Prompt Length": len(prompt),
-                        "Make": make,
-                        "Model Name": model,
-                        "Year": year,
-                        "Mileage": mileage,
-                        "Color": color,
-                        "Fuel Type": fuel,
-                        "Transmission": transmission,
-                        "Price": price,
-                        "Features": features,
-                        "Dealer Notes": notes
-                    }
-                    append_to_google_sheet("AI_Metrics", ai_metrics)
-                    increment_usage(user_email, listing)
+                        ai_metrics = {
+                            "Email": user_email,
+                            "Timestamp": datetime.now().isoformat(),
+                            "Model": "gpt-4o-mini",
+                            "Response Time (s)": round(duration, 2),
+                            "Prompt Length": len(prompt),
+                            "Make": make,
+                            "Model Name": model,
+                            "Year": year,
+                            "Mileage": mileage,
+                            "Color": color,
+                            "Fuel Type": fuel,
+                            "Transmission": transmission,
+                            "Price": price,
+                            "Features": features,
+                            "Dealer Notes": notes
+                        }
+                        append_to_google_sheet("AI_Metrics", ai_metrics)
+                        increment_usage(user_email, listing)
 
-                except Exception as e:
-                    st.error(f"⚠️ Error: {e}")
+                    except Exception as e:
+                        st.error(f"⚠️ Error: {e}")
 
             # AI Metrics Overview
-            st.markdown("### 🤖 AI Performance Insights")
+            st.markdown('<div class="card"><h4>🤖 AI Performance Insights</h4></div>', unsafe_allow_html=True)
             col1, col2, col3, col4 = st.columns(4)
             col1.metric("⚡ Avg Generation Time", f"{np.random.uniform(3.5, 8.0):.1f}s")
             col2.metric("✅ Success Rate", f"{np.random.uniform(85, 100):.1f}%")
@@ -208,47 +242,7 @@ Guidelines:
     # SOCIAL MEDIA ANALYTICS
     # ----------------------
     with tabs[1]:
-        if not is_active:
-            st.warning("⚠️ Your trial has ended. Upgrade to access analytics.")
-            st.stop()
-
-        st.markdown("### 📊 Social Media Analytics (Premium)")
-        st.markdown("#### 📱 Add Social Media Performance")
-
-        with st.form("add_social_data_form"):
-            platform = st.selectbox("Platform", ["TikTok", "Instagram", "Facebook", "YouTube", "Twitter/X", "LinkedIn"])
-            make = st.text_input("Car Make (e.g., BMW)")
-            model = st.text_input("Car Model (e.g., 1 Series)")
-            reach = st.number_input("Reach", min_value=0, step=100)
-            impressions = st.number_input("Impressions", min_value=0, step=100)
-            revenue = st.number_input("Revenue (£)", min_value=0.0, step=10.0)
-            conversions = st.number_input("Conversions", min_value=0, step=1)
-            ad_cost = st.number_input("Ad Cost (£)", min_value=0.0, step=10.0)
-            submitted = st.form_submit_button("Add Performance Record")
-
-            if submitted:
-                try:
-                    row_data = {
-                        "Email": user_email,
-                        "Date": str(date.today()),
-                        "Platform": platform,
-                        "Make": make,
-                        "Model": model,
-                        "Reach": reach,
-                        "Impressions": impressions,
-                        "Revenue": revenue,
-                        "Conversions": conversions,
-                        "Ad Cost": ad_cost
-                    }
-                    append_to_google_sheet("Social_Media", row_data)
-                    st.success("✅ Performance record added successfully!")
-                    st.experimental_rerun()
-                except Exception as e:
-                    st.error(f"❌ Error adding record: {e}")
-
-        st.markdown("---")
-        st.markdown("#### 📈 View Analytics")
-
+        st.markdown('<div class="card"><h3>📊 Social Media Analytics (Premium)</h3></div>', unsafe_allow_html=True)
         with st.form("sm_analytics_form"):
             sm_make = st.text_input("Filter by Make (optional)")
             sm_model = st.text_input("Filter by Model (optional)")
@@ -267,87 +261,47 @@ Guidelines:
             if sm_df.empty:
                 st.warning("No social media data available for selected filters.")
             else:
-                # Reach & Impressions
+                # KPI Cards
+                total_reach = sm_df["Reach"].sum()
+                total_impressions = sm_df["Impressions"].sum()
+                total_revenue = sm_df["Revenue"].sum()
+                col1, col2, col3 = st.columns(3)
+                col1.metric("📈 Total Reach", f"{total_reach:,}")
+                col2.metric("👁 Total Impressions", f"{total_impressions:,}")
+                col3.metric("💰 Total Revenue", f"£{total_revenue:,}")
+
+                # Reach & Impressions chart
                 fig1 = go.Figure()
                 for platform in sm_df["Platform"].unique():
-                    platform_df = sm_df[sm_df["Platform"] == platform]
-                    fig1.add_trace(go.Bar(
-                        x=platform_df["Model"],
-                        y=platform_df["Reach"],
-                        name=f"{platform} Reach",
-                        text=platform_df["Reach"],
-                        textposition="auto"
-                    ))
-                    fig1.add_trace(go.Bar(
-                        x=platform_df["Model"],
-                        y=platform_df["Impressions"],
-                        name=f"{platform} Impressions",
-                        text=platform_df["Impressions"],
-                        textposition="auto"
-                    ))
-                fig1.update_layout(
-                    title="Reach & Impressions per Platform & Model",
-                    barmode='group',
-                    xaxis_title="Car Model",
-                    yaxis_title="Count",
-                    legend_title="Platform / Metric"
-                )
+                    dfp = sm_df[sm_df["Platform"] == platform]
+                    fig1.add_trace(go.Bar(x=dfp["Model"], y=dfp["Reach"], name=f"{platform} Reach", text=dfp["Reach"], textposition="auto"))
+                    fig1.add_trace(go.Bar(x=dfp["Model"], y=dfp["Impressions"], name=f"{platform} Impressions", text=dfp["Impressions"], textposition="auto"))
+                fig1.update_layout(barmode='group', xaxis_title="Car Model", yaxis_title="Count", legend_title="Platform / Metric")
                 st.plotly_chart(fig1, use_container_width=True)
 
-                # Revenue
-                fig2 = px.bar(
-                    sm_df,
-                    x="Model",
-                    y="Revenue",
-                    color="Platform",
-                    text="Revenue",
-                    title="Estimated Revenue per Model & Platform"
-                )
+                # Revenue chart
+                fig2 = px.bar(sm_df, x="Model", y="Revenue", color="Platform", text="Revenue", title="Estimated Revenue per Model & Platform")
                 fig2.update_traces(texttemplate="£%{text}", textposition='outside')
                 st.plotly_chart(fig2, use_container_width=True)
 
-                # ROI / Conversion vs Cost
+                # ROI chart
                 if "Conversions" in sm_df.columns and "Ad Cost" in sm_df.columns:
                     sm_df["ROI"] = sm_df["Revenue"] / sm_df["Ad Cost"].replace(0, 1)
-                    fig3 = px.bar(
-                        sm_df,
-                        x="Platform",
-                        y="ROI",
-                        color="Model",
-                        text="ROI",
-                        title="ROI (Revenue / Ad Cost) per Platform & Model"
-                    )
+                    fig3 = px.bar(sm_df, x="Platform", y="ROI", color="Model", text="ROI", title="ROI (Revenue / Ad Cost) per Platform & Model")
                     st.plotly_chart(fig3, use_container_width=True)
-
-                # Top Platform
-                platform_summary = sm_df.groupby("Platform").agg({
-                    "Revenue": "sum",
-                    "Reach": "sum",
-                    "Impressions": "sum"
-                }).reset_index()
-                best_platform = platform_summary.sort_values("Revenue", ascending=False).iloc[0]
-                st.success(f"🏆 Top Platform: {best_platform['Platform']}")
-                st.info(f"Reach: {best_platform['Reach']:,}, Impressions: {best_platform['Impressions']:,}, Revenue: £{best_platform['Revenue']:,}")
 
                 # Trends over time
                 if "Date" in sm_df.columns:
                     sm_df["Date"] = pd.to_datetime(sm_df["Date"], errors='coerce')
-                    fig4 = px.line(
-                        sm_df,
-                        x="Date",
-                        y=["Revenue", "Reach", "Impressions"],
-                        color="Platform",
-                        title="Revenue, Reach & Impressions Over Time"
-                    )
+                    fig4 = px.line(sm_df, x="Date", y=["Revenue", "Reach", "Impressions"], color="Platform", title="Revenue, Reach & Impressions Over Time")
                     st.plotly_chart(fig4, use_container_width=True)
 
     # ----------------------
     # DEALER LEADERBOARD
     # ----------------------
     with tabs[2]:
-        st.markdown("### 🏆 Dealer Leaderboard")
+        st.markdown('<div class="card"><h3>🏆 Dealer Leaderboard</h3></div>', unsafe_allow_html=True)
         leaderboard_df = get_user_activity_data("AI_Metrics")
-
         if leaderboard_df.empty:
             st.info("Showing demo leaderboard (no live dealer data yet).")
             leaderboard_df = pd.DataFrame([
@@ -361,24 +315,15 @@ Guidelines:
                 "Prompt Length": "mean",
                 "Timestamp": "count"
             }).reset_index()
-            dealer_stats.rename(columns={
-                "Timestamp": "Listings Generated",
-                "Response Time (s)": "Avg Response Time (s)",
-                "Prompt Length": "Avg Prompt Length"
-            }, inplace=True)
+            dealer_stats.rename(columns={"Timestamp": "Listings Generated",
+                                         "Response Time (s)": "Avg Response Time (s)",
+                                         "Prompt Length": "Avg Prompt Length"}, inplace=True)
             dealer_stats.sort_values("Listings Generated", ascending=False, inplace=True)
             leaderboard_df = dealer_stats
 
         st.dataframe(leaderboard_df)
 
-        top_chart = px.bar(
-            leaderboard_df.head(10),
-            x="Email",
-            y="Listings Generated",
-            color="Listings Generated",
-            title="Top 10 Active Dealers",
-            text_auto=True
-        )
+        top_chart = px.bar(leaderboard_df.head(10), x="Email", y="Listings Generated", color="Listings Generated", title="Top 10 Active Dealers", text_auto=True)
         st.plotly_chart(top_chart, use_container_width=True)
 
 else:
