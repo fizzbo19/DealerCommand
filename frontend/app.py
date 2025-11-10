@@ -94,7 +94,7 @@ if user_email:
     # SIDEBAR UPGRADE PLANS
     # ----------------------
     st.sidebar.markdown("### 💳 Choose Your Plan")
-    calendly_link = "https://calendly.com/your-calendly-link"  # Replace
+    calendly_link = "https://calendly.com/fizmaygroup-info/30min"  # Replace
 
     def sidebar_upgrade_button(plan_name, plan_label, plan_price):
         checkout_url = create_checkout_session(user_email, plan=plan_name)
@@ -283,7 +283,7 @@ Guidelines:
         upgrade_button("pro", "🚀 Upgrade to Pro", "59.99")
 
 else:
-    st.info("👋 Enter your dealership email above to begin your 3-month premium trial.")
+    st.info("👋 Enter your dealership email above to begin your 30 day pro trial.")
 
 # ----------------------
 # FOOTER
