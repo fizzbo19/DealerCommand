@@ -19,7 +19,7 @@ if st.button("Continue"):
             st.session_state["authenticated"] = True
             st.session_state["user_email"] = email
             if status == "new":
-                st.success("Welcome — your 3-month trial has started.")
+                st.success("Welcome — your 30 day trial has started.")
             elif status == "active":
                 st.success(f"Welcome back — trial active until {expiry}.")
             else:

@@ -112,7 +112,7 @@ if user_email:
     """, unsafe_allow_html=True)
 
     st.sidebar.markdown("---")
-    st.sidebar.markdown("💬 **Need help?** [Contact support](mailto:support@dealercommand.ai)")
+    st.sidebar.markdown("💬 **Need help?** [Contact support](mailto:info@dealercommand.tech)")
 
     # ----------------------
     # TABS: Listings | Analytics | Leaderboard
@@ -289,6 +289,6 @@ else:
 # FOOTER
 # ----------------------
 st.markdown(
-    '<div class="footer">© 2025 DealerCommand AI — Powered by Carfundo</div>', 
+    '<div class="footer">© 2025 DealerCommand AI — Powered by FizMay Group</div>', 
     unsafe_allow_html=True
 )
