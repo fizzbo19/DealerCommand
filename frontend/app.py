@@ -1,6 +1,6 @@
 # frontend/app.py
 import sys, os, json, time
-from datetime import datetime, date
+from datetime import datetime
 import streamlit as st
 from openai import OpenAI
 import numpy as np
@@ -31,16 +31,13 @@ LOGO_FILE = os.path.join(ASSETS_DIR, "dealercommand_logov1.png")
 
 if os.path.exists(LOGO_FILE):
     st.sidebar.image(LOGO_FILE, width=160, caption="DealerCommand AI")
-else:
-    st.sidebar.markdown("**DealerCommand AI**")
-
-if os.path.exists(LOGO_FILE):
     st.markdown(f"""
     <div style="display:flex; justify-content:center; align-items:center; margin-top:1rem; margin-bottom:1rem;">
         <img src="{LOGO_FILE}" alt="DealerCommand AI Logo" width="200" style="border-radius:12px;">
     </div>
     """, unsafe_allow_html=True)
 else:
+    st.sidebar.markdown("**DealerCommand AI**")
     st.markdown('<h2 style="text-align:center;">🚗 DealerCommand AI</h2>', unsafe_allow_html=True)
 
 st.markdown('<div class="hero-sub">Create high-converting, SEO-optimised car listings in seconds with AI.</div>', unsafe_allow_html=True)
@@ -51,55 +48,15 @@ st.markdown('<div class="hero-sub">Create high-converting, SEO-optimised car lis
 st.markdown("""
 <style>
 body { background-color: #f9fafb; color: #111827; font-family: 'Inter', sans-serif; }
-.main { padding-top: 0rem; }
-.hero-title { font-size: 2.4rem; font-weight: 700; text-align: center; color: #111827; margin-bottom: 0.4rem; }
-.hero-sub { text-align: center; color: #6b7280; font-size: 1.1rem; margin-bottom: 2.5rem; }
 .stButton > button { background: linear-gradient(90deg, #2563eb, #1e40af); color: white; border-radius: 10px; padding: 0.6rem 1.4rem; font-weight: 600; border: none; transition: 0.2s ease-in-out; }
 .stButton > button:hover { background: linear-gradient(90deg, #1e40af, #2563eb); transform: scale(1.02); }
 .stDownloadButton > button { background: #10b981; color: white; border-radius: 8px; font-weight: 500; }
 .footer { text-align: center; color: #9ca3af; font-size: 0.9rem; margin-top: 3rem; }
-[data-testid="stMetricValue"] { color: #1d4ed8 !important; font-weight: 700 !important; }
-[data-testid="stMetricLabel"] { color: #6b7280 !important; }
-
-.card {
-    background: linear-gradient(135deg, #ffffff, #f0f4f8);
-    border-radius: 16px;
-    padding: 1.2rem;
-    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
-    margin-bottom: 1.5rem;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-    position: relative;
-}
-.card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 12px 30px rgba(0,0,0,0.12);
-}
-.card img {
-    border-radius: 12px;
-}
-.ribbon {
-    position: absolute;
-    top: -10px;
-    right: -10px;
-    background: #10b981;
-    color: white;
-    padding: 0.4rem 1rem;
-    font-weight: 600;
-    border-radius: 8px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-}
-.feature-icon {
-    display: inline-block;
-    background: #2563eb;
-    color: white;
-    border-radius: 50%;
-    width: 22px;
-    height: 22px;
-    text-align: center;
-    line-height: 22px;
-    margin-right: 6px;
-    font-size: 14px;
-}
+.card { background: linear-gradient(135deg, #ffffff, #f0f4f8); border-radius: 16px; padding: 1.2rem; box-shadow: 0 6px 20px rgba(0,0,0,0.08); margin-bottom: 1.5rem; transition: transform 0.3s ease, box-shadow 0.3s ease; position: relative; }
+.card:hover { transform: translateY(-5px); box-shadow: 0 12px 30px rgba(0,0,0,0.12); }
+.card img { border-radius: 12px; }
+.ribbon { position: absolute; top: -10px; right: -10px; background: #10b981; color: white; padding: 0.4rem 1rem; font-weight: 600; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+.feature-icon { display: inline-block; background: #2563eb; color: white; border-radius: 50%; width: 22px; height: 22px; text-align: center; line-height: 22px; margin-right: 6px; font-size: 14px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -113,6 +70,7 @@ if not api_key:
     st.error("⚠️ Missing OpenAI key — set `OPENAI_API_KEY` in Render environment.")
     st.stop()
 
+# Only run main app if email is provided
 if user_email:
     status, expiry, usage_count = ensure_user_and_get_status(user_email)
     is_active = status in ["active", "new"]
@@ -120,55 +78,41 @@ if user_email:
     # ----------------------
     # SIDEBAR DASHBOARD
     # ----------------------
-    # ----------------------
-    # SIDEBAR DASHBOARD & UPGRADE PLANS
-    # ----------------------
     st.sidebar.title("⚙️ Dashboard")
     st.sidebar.markdown(f"**👤 User:** {user_email}")
     st.sidebar.markdown(f"**📅 Trial Ends:** {expiry}")
     st.sidebar.markdown(f"**📊 Listings Used:** {usage_count} / 15")
     st.sidebar.progress(int(min((usage_count / 15) * 100, 100)))
 
-    # Trial or Subscription Status
     if is_active:
         st.sidebar.markdown('<span style="color:#10b981;">🟢 Trial Active</span>', unsafe_allow_html=True)
     else:
         st.sidebar.markdown('<span style="color:#ef4444;">🔴 Trial Expired</span>', unsafe_allow_html=True)
         st.sidebar.warning("Your trial has ended. Upgrade below to continue using DealerCommand.")
 
-        st.sidebar.markdown("### 💳 Choose Your Plan")
-        st.sidebar.markdown("""
-        **Premium — £29.99/mo**
-        - Unlimited AI listings  
-        - Smart CV builder  
-        - Social media posting tools  
-        - Access to dealership insights  
-        """)
+    # ----------------------
+    # SIDEBAR UPGRADE PLANS
+    # ----------------------
+    st.sidebar.markdown("### 💳 Choose Your Plan")
+    calendly_link = "https://calendly.com/your-calendly-link"  # Replace
 
-        if st.sidebar.button("🚀 Upgrade to Premium (£29.99/mo)"):
-            checkout_url = create_checkout_session(user_email, plan="premium")
-            if checkout_url:
-                st.sidebar.markdown(f"[👉 Proceed to Checkout]({checkout_url})", unsafe_allow_html=True)
+    def sidebar_upgrade_button(plan_name, plan_label, plan_price):
+        checkout_url = create_checkout_session(user_email, plan=plan_name)
+        st.sidebar.markdown(f"""
+        <div class="plan-card">
+            <div class="plan-title">{plan_label}</div>
+            <div class="plan-price">£{plan_price} / mo</div>
+            <a href="{checkout_url}" target="_blank" class="plan-btn btn-premium">Upgrade</a>
+        </div>
+        """, unsafe_allow_html=True)
 
-        st.sidebar.markdown("---")
-
-        st.sidebar.markdown("""
-        **Pro — £59.99/mo**
-        - Everything in Premium  
-        - Dealer growth analytics  
-        - Lead generation tools  
-        - Social media automation  
-        - Dedicated support  
-        """)
-
-        if st.sidebar.button("🔥 Upgrade to Pro (£59.99/mo)"):
-            checkout_url = create_checkout_session(user_email, plan="pro")
-            if checkout_url:
-                st.sidebar.markdown(f"[👉 Proceed to Checkout]({checkout_url})", unsafe_allow_html=True)
+    # Free consultation button
+    st.sidebar.markdown(f"""
+    <a href="{calendly_link}" target="_blank" class="plan-btn btn-consult">📅 Book Free 30-min Consultation</a>
+    """, unsafe_allow_html=True)
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("💬 **Need help?** [Contact support](mailto:support@dealercommand.ai)")
-
 
     # ----------------------
     # TABS: Listings | Analytics | Leaderboard
@@ -176,7 +120,7 @@ if user_email:
     tabs = st.tabs(["🧾 Generate Listing", "📊 Analytics Dashboard", "🏆 Dealer Leaderboard"])
 
     # ----------------------
-    # LISTING GENERATOR (Premium Marketplace UI)
+    # LISTING GENERATOR
     # ----------------------
     with tabs[0]:
         if is_active:
@@ -254,7 +198,7 @@ Guidelines:
 
                     st.success("✅ Listing generated successfully!")
 
-                    # Premium Marketplace Card UI with ribbon & feature icons
+                    # Card UI
                     st.markdown('<div class="card">', unsafe_allow_html=True)
                     st.markdown(f'<div class="ribbon">{price}</div>', unsafe_allow_html=True)
                     card_cols = st.columns([1,2])
@@ -277,6 +221,7 @@ Guidelines:
                         st.markdown(listing_text)
                     st.markdown('</div>', unsafe_allow_html=True)
 
+                    # Download
                     st.download_button("⬇ Download Listing", listing_text, file_name="listing.txt")
 
                     # Save metrics
@@ -302,26 +247,40 @@ Guidelines:
 
                 except Exception as e:
                     st.error(f"⚠️ Error: {e}")
-
         else:
             st.warning("⚠️ Your trial has ended. Please upgrade to continue.")
-            if st.button("💳 Upgrade Now"):
-                checkout_url = create_checkout_session(user_email)
-                st.markdown(f"[👉 Click here to upgrade your plan]({checkout_url})", unsafe_allow_html=True)
 
     # ----------------------
     # SOCIAL MEDIA ANALYTICS
     # ----------------------
     with tabs[1]:
         st.markdown("### 📊 Social Media Analytics (Premium)")
-        # ... existing analytics code remains unchanged
+        # ... existing analytics code
 
     # ----------------------
     # DEALER LEADERBOARD
     # ----------------------
     with tabs[2]:
         st.markdown("### 🏆 Dealer Leaderboard")
-        # ... existing leaderboard code remains unchanged
+        # ... existing leaderboard code
+
+    # ----------------------
+    # MAIN UPGRADE BUTTONS
+    # ----------------------
+    col1, col2 = st.columns(2)
+
+    def upgrade_button(plan_name, plan_label, plan_price):
+        if st.button(f"{plan_label} (£{plan_price}/mo)"):
+            checkout_url = create_checkout_session(user_email, plan=plan_name)
+            if checkout_url:
+                st.markdown(f"[👉 Click here to complete {plan_label} upgrade]({checkout_url})", unsafe_allow_html=True)
+            else:
+                st.error("⚠️ Unable to create checkout session. Please try again later.")
+
+    with col1:
+        upgrade_button("premium", "💎 Upgrade to Premium", "29.99")
+    with col2:
+        upgrade_button("pro", "🚀 Upgrade to Pro", "59.99")
 
 else:
     st.info("👋 Enter your dealership email above to begin your 3-month premium trial.")
@@ -329,4 +288,7 @@ else:
 # ----------------------
 # FOOTER
 # ----------------------
-st.markdown('<div class="footer">© 2025 DealerCommand AI — Powered by Carfundo</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="footer">© 2025 DealerCommand AI — Powered by Carfundo</div>', 
+    unsafe_allow_html=True
+)

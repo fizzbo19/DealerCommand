@@ -13,6 +13,11 @@ STRIPE_CANCEL_URL = os.environ.get("STRIPE_CANCEL_URL", "https://dealercommand.t
 
 stripe.api_key = STRIPE_SECRET_KEY
 
+# Mapping plans to Price IDs
+PLAN_PRICE_IDS = {
+    "premium": STRIPE_PREMIUM_PRICE_ID,
+    "pro": STRIPE_PRO_PRICE_ID
+}
 
 # --------------------------
 # CREATE CHECKOUT SESSION
@@ -22,20 +27,13 @@ def create_checkout_session(user_email, plan="premium"):
     Create a Stripe Checkout session for a user based on selected plan.
     Supported plans: 'premium', 'pro'
     """
-
     if not STRIPE_SECRET_KEY:
-        print("❌ Missing STRIPE_SECRET_KEY in environment.")
+        print("❌ STRIPE_SECRET_KEY not set in environment.")
         return None
 
-    # Select the appropriate Price ID
-    price_id = None
-    if plan == "pro":
-        price_id = STRIPE_PRO_PRICE_ID
-    elif plan == "premium":
-        price_id = STRIPE_PREMIUM_PRICE_ID
-
+    price_id = PLAN_PRICE_IDS.get(plan.lower())
     if not price_id:
-        print(f"⚠️ Missing Price ID for plan: {plan}. Please check environment variables.")
+        print(f"⚠️ Price ID for plan '{plan}' not found. Check environment variables.")
         return None
 
     try:
@@ -55,14 +53,13 @@ def create_checkout_session(user_email, plan="premium"):
         print(f"⚠️ Stripe Checkout session creation failed: {e}")
         return None
 
-
 # --------------------------
 # RETRIEVE SUBSCRIPTION DETAILS
 # --------------------------
 def get_subscription_details(session_id):
     """
     Retrieves subscription details after checkout success.
-    Returns plan type, customer email, and status if available.
+    Returns customer email, plan_id, and subscription status.
     """
     try:
         session = stripe.checkout.Session.retrieve(session_id)
@@ -78,4 +75,3 @@ def get_subscription_details(session_id):
     except Exception as e:
         print(f"⚠️ Failed to retrieve subscription details: {e}")
         return None
-
