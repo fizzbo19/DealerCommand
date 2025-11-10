@@ -120,22 +120,55 @@ if user_email:
     # ----------------------
     # SIDEBAR DASHBOARD
     # ----------------------
+    # ----------------------
+    # SIDEBAR DASHBOARD & UPGRADE PLANS
+    # ----------------------
     st.sidebar.title("⚙️ Dashboard")
     st.sidebar.markdown(f"**👤 User:** {user_email}")
     st.sidebar.markdown(f"**📅 Trial Ends:** {expiry}")
     st.sidebar.markdown(f"**📊 Listings Used:** {usage_count} / 15")
     st.sidebar.progress(int(min((usage_count / 15) * 100, 100)))
 
+    # Trial or Subscription Status
     if is_active:
         st.sidebar.markdown('<span style="color:#10b981;">🟢 Trial Active</span>', unsafe_allow_html=True)
     else:
         st.sidebar.markdown('<span style="color:#ef4444;">🔴 Trial Expired</span>', unsafe_allow_html=True)
-        if st.sidebar.button("💳 Upgrade Plan"):
-            checkout_url = create_checkout_session(user_email)
-            st.sidebar.markdown(f"[👉 Upgrade to Pro]({checkout_url})", unsafe_allow_html=True)
+        st.sidebar.warning("Your trial has ended. Upgrade below to continue using DealerCommand.")
+
+        st.sidebar.markdown("### 💳 Choose Your Plan")
+        st.sidebar.markdown("""
+        **Premium — £29.99/mo**
+        - Unlimited AI listings  
+        - Smart CV builder  
+        - Social media posting tools  
+        - Access to dealership insights  
+        """)
+
+        if st.sidebar.button("🚀 Upgrade to Premium (£29.99/mo)"):
+            checkout_url = create_checkout_session(user_email, plan="premium")
+            if checkout_url:
+                st.sidebar.markdown(f"[👉 Proceed to Checkout]({checkout_url})", unsafe_allow_html=True)
+
+        st.sidebar.markdown("---")
+
+        st.sidebar.markdown("""
+        **Pro — £59.99/mo**
+        - Everything in Premium  
+        - Dealer growth analytics  
+        - Lead generation tools  
+        - Social media automation  
+        - Dedicated support  
+        """)
+
+        if st.sidebar.button("🔥 Upgrade to Pro (£59.99/mo)"):
+            checkout_url = create_checkout_session(user_email, plan="pro")
+            if checkout_url:
+                st.sidebar.markdown(f"[👉 Proceed to Checkout]({checkout_url})", unsafe_allow_html=True)
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("💬 **Need help?** [Contact support](mailto:support@dealercommand.ai)")
+
 
     # ----------------------
     # TABS: Listings | Analytics | Leaderboard
