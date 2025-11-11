@@ -77,11 +77,13 @@ if user_email:
     status, expiry, usage_count = ensure_user_and_get_status(user_email)
     is_active = status in ["active", "new"]
 
-    # Convert expiry to datetime and compute remaining days
-    # expiry is already a datetime object
-    expiry_date = expiry
-    remaining_days = (expiry_date - datetime.now()).days
+    # Convert expiry to datetime if needed
+    if isinstance(expiry, str):
+        expiry_date = datetime.strptime(expiry, "%Y-%m-%d")
+    else:
+        expiry_date = expiry
 
+    remaining_days = (expiry_date - datetime.now()).days
 
     # ----------------------
     # SIDEBAR DASHBOARD
@@ -91,36 +93,38 @@ if user_email:
     st.sidebar.markdown(f"**📊 Listings Used:** {usage_count} / 15")
     st.sidebar.progress(int(min((usage_count / 15) * 100, 100)))
 
-if is_active and remaining_days > 0:
-    st.sidebar.markdown(f"<span style='color:#10b981;'>🟢 Trial Active</span>", unsafe_allow_html=True)
-    st.sidebar.markdown(f"**⏳ Days Remaining:** {remaining_days} days")
-    st.sidebar.markdown(f"**📅 Trial Ends:** {expiry_date.strftime('%B %d, %Y')}")
-else:
-    st.sidebar.markdown(f"<span style='color:#ef4444;'>🔴 Trial Expired</span>", unsafe_allow_html=True)
-    st.sidebar.warning("Your trial has ended. Upgrade below to continue using DealerCommand.")
-
-
     # ----------------------
-    # SIDEBAR UPGRADE PLANS
+    # SIDEBAR TRIAL STATUS
     # ----------------------
-    st.sidebar.markdown("### 💳 Choose Your Plan")
-    calendly_link = "https://calendly.com/fizmaygroup-info/30min"
+    if is_active and remaining_days > 0:
+        st.sidebar.markdown(f"<span style='color:#10b981;'>🟢 Trial Active</span>", unsafe_allow_html=True)
+        st.sidebar.markdown(f"**⏳ Days Remaining:** {remaining_days} days")
+        st.sidebar.markdown(f"**📅 Trial Ends:** {expiry_date.strftime('%B %d, %Y')}")
+    else:
+        st.sidebar.markdown(f"<span style='color:#ef4444;'>🔴 Trial Expired</span>", unsafe_allow_html=True)
+        st.sidebar.warning("Your trial has ended. Upgrade below to continue using DealerCommand.")
 
-    def sidebar_upgrade_button(plan_name, plan_label, plan_price):
-        checkout_url = create_checkout_session(user_email, plan=plan_name)
+        # ----------------------
+        # SIDEBAR UPGRADE PLANS
+        # ----------------------
+        st.sidebar.markdown("### 💳 Choose Your Plan")
+        calendly_link = "https://calendly.com/fizmaygroup-info/30min"
+
+        def sidebar_upgrade_button(plan_name, plan_label, plan_price):
+            checkout_url = create_checkout_session(user_email, plan=plan_name)
+            st.sidebar.markdown(f"""
+            <div class="plan-card">
+                <div class="plan-title">{plan_label}</div>
+                <div class="plan-price">£{plan_price} / mo</div>
+                <a href="{checkout_url}" target="_blank" class="plan-btn btn-premium">Upgrade</a>
+            </div>
+            """, unsafe_allow_html=True)
+
         st.sidebar.markdown(f"""
-        <div class="plan-card">
-            <div class="plan-title">{plan_label}</div>
-            <div class="plan-price">£{plan_price} / mo</div>
-            <a href="{checkout_url}" target="_blank" class="plan-btn btn-premium">Upgrade</a>
-        </div>
+        <a href="{calendly_link}" target="_blank" class="plan-btn btn-consult">📅 Book Free 30-min Consultation</a>
         """, unsafe_allow_html=True)
-
-    st.sidebar.markdown(f"""
-    <a href="{calendly_link}" target="_blank" class="plan-btn btn-consult">📅 Book Free 30-min Consultation</a>
-    """, unsafe_allow_html=True)
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("💬 **Need help?** [Contact support](mailto:info@dealercommand.tech)")
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("💬 **Need help?** [Contact support](mailto:info@dealercommand.tech)")
 
     # ----------------------
     # TABS: Listings | Analytics | Activity
@@ -202,7 +206,7 @@ Include emojis and SEO flair.
                         "Year": year
                     }
                     append_to_google_sheet("AI_Metrics", ai_metrics)
-                    increment_usage(user_email, listing_text)
+                    increment_usage(user_email, 1)
 
                 except Exception as e:
                     st.error(f"⚠️ Error: {e}")
@@ -226,7 +230,6 @@ Include emojis and SEO flair.
             st.dataframe(activity_data)
         except Exception as e:
             st.error(f"⚠️ Could not load user activity: {e}")
-
 else:
     st.info("👋 Enter your dealership email above to begin your 30-day Pro trial.")
 
