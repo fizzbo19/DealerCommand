@@ -70,6 +70,38 @@ if not api_key:
     st.error("⚠️ Missing OpenAI key — set `OPENAI_API_KEY` in Render environment.")
     st.stop()
 
+# ==========================================================
+# 🎯 DEALERCOMMAND SUBSCRIPTION LOGIC OVERVIEW
+# ==========================================================
+# This logic handles the 30-day free trial and post-trial upgrade flow.
+
+# 1️⃣ NEW USERS:
+#    - When a new user signs up, they automatically start a 30-day free trial.
+#    - During the trial (is_active = True), users have full access to all Pro features.
+#    - This means they can explore DealerCommand Premium + Pro tools freely.
+
+# 2️⃣ TRIAL STATUS CHECK:
+#    - The function `ensure_user_and_get_status(user_email)` determines if the user
+#      is new, active (trial ongoing), or expired.
+#    - If active → full access remains unlocked.
+#    - If expired → access is restricted, and upgrade options appear in the sidebar.
+
+# 3️⃣ TRIAL EXPIRY FLOW:
+#    - Once the trial expires, `is_active = False`.
+#    - The user sees both "Premium (£29.99/mo)" and "Pro (£59.99/mo)" options.
+#    - Clicking the upgrade buttons triggers `create_checkout_session()`, which
+#      redirects to Stripe for subscription payment.
+
+# 4️⃣ SUBSCRIPTION ACTIVATION:
+#    - After successful payment, the user lands on `success.py`.
+#    - Stripe confirms their plan and activates their subscription.
+#    - Access is restored based on their selected plan.
+
+# ✅ In short:
+#    ➜ Trial = Full Pro Access (30 Days)
+#    ➜ After Trial = Choose Premium or Pro plan to continue
+# ==========================================================
+
 # Only run main app if email is provided
 if user_email:
     status, expiry, usage_count = ensure_user_and_get_status(user_email)
