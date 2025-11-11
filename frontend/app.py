@@ -78,8 +78,10 @@ if user_email:
     is_active = status in ["active", "new"]
 
     # Convert expiry to datetime and compute remaining days
-    expiry_date = datetime.strptime(expiry, "%Y-%m-%d")
+    # expiry is already a datetime object
+    expiry_date = expiry
     remaining_days = (expiry_date - datetime.now()).days
+
 
     # ----------------------
     # SIDEBAR DASHBOARD
@@ -89,13 +91,14 @@ if user_email:
     st.sidebar.markdown(f"**📊 Listings Used:** {usage_count} / 15")
     st.sidebar.progress(int(min((usage_count / 15) * 100, 100)))
 
-    if is_active and remaining_days > 0:
-        st.sidebar.markdown(f"<span style='color:#10b981;'>🟢 Trial Active</span>", unsafe_allow_html=True)
-        st.sidebar.markdown(f"**⏳ Days Remaining:** {remaining_days} days")
-        st.sidebar.markdown(f"**📅 Trial Ends:** {expiry_date.strftime('%B %d, %Y')}")
-    else:
-        st.sidebar.markdown(f"<span style='color:#ef4444;'>🔴 Trial Expired</span>", unsafe_allow_html=True)
-        st.sidebar.warning("Your trial has ended. Upgrade below to continue using DealerCommand.")
+if is_active and remaining_days > 0:
+    st.sidebar.markdown(f"<span style='color:#10b981;'>🟢 Trial Active</span>", unsafe_allow_html=True)
+    st.sidebar.markdown(f"**⏳ Days Remaining:** {remaining_days} days")
+    st.sidebar.markdown(f"**📅 Trial Ends:** {expiry_date.strftime('%B %d, %Y')}")
+else:
+    st.sidebar.markdown(f"<span style='color:#ef4444;'>🔴 Trial Expired</span>", unsafe_allow_html=True)
+    st.sidebar.warning("Your trial has ended. Upgrade below to continue using DealerCommand.")
+
 
     # ----------------------
     # SIDEBAR UPGRADE PLANS
