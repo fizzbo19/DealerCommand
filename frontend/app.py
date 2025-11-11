@@ -71,64 +71,37 @@ if not api_key:
     st.stop()
 
 # ==========================================================
-# 🎯 DEALERCOMMAND SUBSCRIPTION LOGIC OVERVIEW
+# 🎯 DEALERCOMMAND SUBSCRIPTION LOGIC
 # ==========================================================
-# This logic handles the 30-day free trial and post-trial upgrade flow.
-
-# 1️⃣ NEW USERS:
-#    - When a new user signs up, they automatically start a 30-day free trial.
-#    - During the trial (is_active = True), users have full access to all Pro features.
-#    - This means they can explore DealerCommand Premium + Pro tools freely.
-
-# 2️⃣ TRIAL STATUS CHECK:
-#    - The function `ensure_user_and_get_status(user_email)` determines if the user
-#      is new, active (trial ongoing), or expired.
-#    - If active → full access remains unlocked.
-#    - If expired → access is restricted, and upgrade options appear in the sidebar.
-
-# 3️⃣ TRIAL EXPIRY FLOW:
-#    - Once the trial expires, `is_active = False`.
-#    - The user sees both "Premium (£29.99/mo)" and "Pro (£59.99/mo)" options.
-#    - Clicking the upgrade buttons triggers `create_checkout_session()`, which
-#      redirects to Stripe for subscription payment.
-
-# 4️⃣ SUBSCRIPTION ACTIVATION:
-#    - After successful payment, the user lands on `success.py`.
-#    - Stripe confirms their plan and activates their subscription.
-#    - Access is restored based on their selected plan.
-
-# ✅ In short:
-#    ➜ Trial = Full Pro Access (30 Days)
-#    ➜ After Trial = Choose Premium or Pro plan to continue
-# ==========================================================
-
-# Only run main app if email is provided
 if user_email:
     status, expiry, usage_count = ensure_user_and_get_status(user_email)
     is_active = status in ["active", "new"]
+
+    # Convert expiry to datetime and compute remaining days
+    expiry_date = datetime.strptime(expiry, "%Y-%m-%d")
+    remaining_days = (expiry_date - datetime.now()).days
 
     # ----------------------
     # SIDEBAR DASHBOARD
     # ----------------------
     st.sidebar.title("⚙️ Dashboard")
     st.sidebar.markdown(f"**👤 User:** {user_email}")
-    st.sidebar.markdown(f"**📅 Trial Ends:** {expiry}")
     st.sidebar.markdown(f"**📊 Listings Used:** {usage_count} / 15")
     st.sidebar.progress(int(min((usage_count / 15) * 100, 100)))
 
-    if is_active:
-        st.sidebar.markdown('<span style="color:#10b981;">🟢 Trial Active</span>', unsafe_allow_html=True)
-        st.sidebar.markdown(f"**📅 Trial Ends:** {expiry_date.strftime('%B %d, %Y')} ({remaining_days} days left)")
-
+    if is_active and remaining_days > 0:
+        st.sidebar.markdown(f"<span style='color:#10b981;'>🟢 Trial Active</span>", unsafe_allow_html=True)
+        st.sidebar.markdown(f"**⏳ Days Remaining:** {remaining_days} days")
+        st.sidebar.markdown(f"**📅 Trial Ends:** {expiry_date.strftime('%B %d, %Y')}")
     else:
-        st.sidebar.markdown('<span style="color:#ef4444;">🔴 Trial Expired</span>', unsafe_allow_html=True)
+        st.sidebar.markdown(f"<span style='color:#ef4444;'>🔴 Trial Expired</span>", unsafe_allow_html=True)
         st.sidebar.warning("Your trial has ended. Upgrade below to continue using DealerCommand.")
 
     # ----------------------
     # SIDEBAR UPGRADE PLANS
     # ----------------------
     st.sidebar.markdown("### 💳 Choose Your Plan")
-    calendly_link = "https://calendly.com/fizmaygroup-info/30min"  # Replace
+    calendly_link = "https://calendly.com/fizmaygroup-info/30min"
 
     def sidebar_upgrade_button(plan_name, plan_label, plan_price):
         checkout_url = create_checkout_session(user_email, plan=plan_name)
@@ -140,26 +113,24 @@ if user_email:
         </div>
         """, unsafe_allow_html=True)
 
-    # Free consultation button
     st.sidebar.markdown(f"""
     <a href="{calendly_link}" target="_blank" class="plan-btn btn-consult">📅 Book Free 30-min Consultation</a>
     """, unsafe_allow_html=True)
-
     st.sidebar.markdown("---")
     st.sidebar.markdown("💬 **Need help?** [Contact support](mailto:info@dealercommand.tech)")
 
     # ----------------------
-    # TABS: Listings | Analytics | Leaderboard
+    # TABS: Listings | Analytics | Activity
     # ----------------------
-    tabs = st.tabs(["🧾 Generate Listing", "📊 Analytics Dashboard", "🏆 Dealer Leaderboard"])
+    tabs = st.tabs(["🧾 Generate Listing", "📊 Analytics Dashboard", "📈 User Activity"])
 
     # ----------------------
-    # LISTING GENERATOR
+    # TAB 1: LISTING GENERATOR
     # ----------------------
     with tabs[0]:
-        if is_active:
+        if is_active and remaining_days > 0:
             st.markdown("### 🧾 Generate a New Listing")
-            st.caption("Complete the details below and let AI handle the rest. Upload images to make your listing stand out!")
+            st.caption("Complete the details below and let AI handle the rest.")
 
             with st.form("listing_form"):
                 col1, col2 = st.columns(2)
@@ -169,7 +140,7 @@ if user_email:
                     year = st.text_input("Year", "2021")
                     mileage = st.text_input("Mileage", "28,000 miles")
                     color = st.text_input("Color", "Black")
-                    car_image = st.file_uploader("Upload Car Image (optional)", type=["png","jpg","jpeg"], key="car_image")
+                    car_image = st.file_uploader("Upload Car Image (optional)", type=["png","jpg","jpeg"])
                 with col2:
                     fuel = st.selectbox("Fuel Type", ["Petrol", "Diesel", "Hybrid", "Electric"])
                     transmission = st.selectbox("Transmission", ["Automatic", "Manual"])
@@ -182,9 +153,7 @@ if user_email:
             if submitted:
                 try:
                     client = OpenAI(api_key=api_key)
-
-                    # SEO Titles
-                    seo_prompt = f"Generate 3 SEO-friendly car listing titles for a {year} {make} {model} {color}, emphasizing features: {features}."
+                    seo_prompt = f"Generate 3 SEO-friendly titles for a {year} {make} {model} {color}."
                     seo_response = client.chat.completions.create(
                         model="gpt-4o-mini",
                         messages=[
@@ -196,26 +165,11 @@ if user_email:
                     seo_titles = seo_response.choices[0].message.content.strip()
                     st.info(f"💡 Suggested SEO Titles:\n{seo_titles}")
 
-                    # Full Listing
                     prompt = f"""
-You are an expert automotive marketing assistant.
-Write a professional, engaging listing for this car:
-
-Make: {make}
-Model: {model}
-Year: {year}
-Mileage: {mileage}
-Color: {color}
-Fuel: {fuel}
-Transmission: {transmission}
-Price: {price}
-Features: {features}
-Dealer Notes: {notes}
-
-Guidelines:
-- 100–150 words
-- Include emojis and highlights
-- Optimised for online car marketplaces and SEO
+Write a 100–150 word engaging car listing:
+{year} {make} {model}, {mileage}, {color}, {fuel}, {transmission}, {price}.
+Features: {features}. Dealer Notes: {notes}.
+Include emojis and SEO flair.
 """
                     start_time = time.time()
                     with st.spinner("🤖 Generating your listing..."):
@@ -228,53 +182,21 @@ Guidelines:
                             temperature=0.7
                         )
                         listing_text = response.choices[0].message.content.strip()
-                    duration = time.time() - start_time
 
                     st.success("✅ Listing generated successfully!")
+                    duration = time.time() - start_time
 
-                    # Card UI
-                    st.markdown('<div class="card">', unsafe_allow_html=True)
-                    st.markdown(f'<div class="ribbon">{price}</div>', unsafe_allow_html=True)
-                    card_cols = st.columns([1,2])
-                    with card_cols[0]:
-                        if car_image:
-                            st.image(car_image, use_column_width=True)
-                        else:
-                            st.image("https://via.placeholder.com/300x200.png?text=Car+Image", use_column_width=True)
-                    with card_cols[1]:
-                        st.markdown(f"### {year} {make} {model}")
-                        st.markdown(f"**Mileage:** {mileage}")
-                        st.markdown(f"**Color:** {color}")
-                        st.markdown(f"**Fuel:** {fuel} | **Transmission:** {transmission}")
-                        st.markdown("**Key Features:**")
-                        for feat in features.split(","):
-                            st.markdown(f'<span class="feature-icon">✓</span>{feat.strip()}', unsafe_allow_html=True)
-                        if notes:
-                            st.markdown(f"**Dealer Notes:** {notes}")
-                        st.markdown("**Listing Description:**")
-                        st.markdown(listing_text)
-                    st.markdown('</div>', unsafe_allow_html=True)
-
-                    # Download
+                    st.markdown(f"**Generated Listing:**\n\n{listing_text}")
                     st.download_button("⬇ Download Listing", listing_text, file_name="listing.txt")
 
-                    # Save metrics
                     ai_metrics = {
                         "Email": user_email,
                         "Timestamp": datetime.now().isoformat(),
                         "Model": "gpt-4o-mini",
                         "Response Time (s)": round(duration,2),
-                        "Prompt Length": len(prompt),
                         "Make": make,
                         "Model Name": model,
-                        "Year": year,
-                        "Mileage": mileage,
-                        "Color": color,
-                        "Fuel Type": fuel,
-                        "Transmission": transmission,
-                        "Price": price,
-                        "Features": features,
-                        "Dealer Notes": notes
+                        "Year": year
                     }
                     append_to_google_sheet("AI_Metrics", ai_metrics)
                     increment_usage(user_email, listing_text)
@@ -285,39 +207,25 @@ Guidelines:
             st.warning("⚠️ Your trial has ended. Please upgrade to continue.")
 
     # ----------------------
-    # SOCIAL MEDIA ANALYTICS
+    # TAB 2: ANALYTICS DASHBOARD (placeholder)
     # ----------------------
     with tabs[1]:
         st.markdown("### 📊 Social Media Analytics (Premium)")
-        # ... existing analytics code
+        st.info("Upgrade to view performance insights and engagement analytics.")
 
     # ----------------------
-    # DEALER LEADERBOARD
+    # TAB 3: USER ACTIVITY
     # ----------------------
     with tabs[2]:
-        st.markdown("### 🏆 Dealer Leaderboard")
-        # ... existing leaderboard code
-
-    # ----------------------
-    # MAIN UPGRADE BUTTONS
-    # ----------------------
-    col1, col2 = st.columns(2)
-
-    def upgrade_button(plan_name, plan_label, plan_price):
-        if st.button(f"{plan_label} (£{plan_price}/mo)"):
-            checkout_url = create_checkout_session(user_email, plan=plan_name)
-            if checkout_url:
-                st.markdown(f"[👉 Click here to complete {plan_label} upgrade]({checkout_url})", unsafe_allow_html=True)
-            else:
-                st.error("⚠️ Unable to create checkout session. Please try again later.")
-
-    with col1:
-        upgrade_button("premium", "💎 Upgrade to Premium", "29.99")
-    with col2:
-        upgrade_button("pro", "🚀 Upgrade to Pro", "59.99")
+        st.markdown("### 📈 User Activity Overview")
+        try:
+            activity_data = get_user_activity_data(user_email)
+            st.dataframe(activity_data)
+        except Exception as e:
+            st.error(f"⚠️ Could not load user activity: {e}")
 
 else:
-    st.info("👋 Enter your dealership email above to begin your 30 day pro trial.")
+    st.info("👋 Enter your dealership email above to begin your 30-day Pro trial.")
 
 # ----------------------
 # FOOTER

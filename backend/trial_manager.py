@@ -1,116 +1,110 @@
 # backend/trial_manager.py
-import datetime
-from backend.sheet_utils import get_sheet, append_listing_history
+from datetime import datetime, timedelta
+import pandas as pd
+from backend.sheet_utils import get_user_activity_data, append_to_google_sheet
 
+# ----------------------
+# CONFIG
+# ----------------------
 TRIAL_DAYS = 30
+MAX_FREE_LISTINGS = 15
 
 # ----------------------
-# Trial Management
+# MAIN FUNCTIONS
 # ----------------------
-def ensure_user_and_get_status(email):
+def ensure_user_and_get_status(email: str):
     """
-    Ensures a user exists in the sheet and returns trial status.
+    Checks if the user exists in 'User_Activity' sheet.
+    Creates new user if not.
     Returns:
-        status: "new", "active", or "expired"
-        expiry: trial end date (datetime.date)
-        used: number of listings generated
+        status (str): "new", "active", "expired"
+        expiry_date (datetime)
+        usage_count (int)
     """
-    sheet = get_sheet()
-    today = datetime.date.today()
+    df = get_user_activity_data()
+    user_row = df[df["Email"].str.lower() == email.lower()]
 
-    if not sheet:
-        expiry = today + datetime.timedelta(days=TRIAL_DAYS)
-        return "new", expiry, 0
+    if user_row.empty:
+        # New user → create trial
+        start_date = datetime.today()
+        expiry_date = start_date + timedelta(days=TRIAL_DAYS)
+        usage_count = 0
+        status = "new"
 
-    records = sheet.get_all_records()
-    for i, record in enumerate(records, start=2):
-        if str(record.get("Email", "")).lower() == email.lower():
-            try:
-                expiry = datetime.datetime.strptime(record.get("Trial Ends"), "%Y-%m-%d").date()
-            except Exception:
-                expiry = today + datetime.timedelta(days=TRIAL_DAYS)
-            used = int(record.get("Listings Generated", 0))
-            if today > expiry:
-                return "expired", expiry, used
-            return "active", expiry, used
+        # Append to sheet
+        append_to_google_sheet("User_Activity", {
+            "Email": email,
+            "Start_Date": start_date.strftime("%Y-%m-%d"),
+            "Expiry_Date": expiry_date.strftime("%Y-%m-%d"),
+            "Status": status,
+            "Usage_Count": usage_count
+        })
+    else:
+        # Existing user
+        user_row = user_row.iloc[0]
+        start_date = pd.to_datetime(user_row["Start_Date"]) if pd.notnull(user_row["Start_Date"]) else datetime.today()
+        expiry_date = pd.to_datetime(user_row["Expiry_Date"]) if pd.notnull(user_row["Expiry_Date"]) else start_date + timedelta(days=TRIAL_DAYS)
+        usage_count = int(user_row["Usage_Count"]) if pd.notnull(user_row["Usage_Count"]) else 0
 
-    # New user → append to sheet
-    expiry = today + datetime.timedelta(days=TRIAL_DAYS)
-    try:
-        sheet.append_row([email, str(today), str(expiry), 0])
-    except Exception as e:
-        print(f"⚠️ Could not append new trial user: {e}")
-    return "new", expiry, 0
+        # Determine status
+        status = "active" if datetime.today() <= expiry_date else "expired"
 
+    return status, expiry_date, usage_count
 
 # ----------------------
-# Increment Listings Usage
-# ----------------------
-def increment_usage(email, listing_text):
+def increment_usage(email: str, num=1):
     """
-    Increments the listing count for a user and logs the listing to history.
-    Returns True if successful, False if trial expired or update fails.
+    Increment usage count for a user by `num`.
+    Returns the new usage count.
     """
-    sheet = get_sheet()
-    today = datetime.date.today()
+    df = get_user_activity_data()
+    user_idx = df[df["Email"].str.lower() == email.lower()].index
 
-    if not sheet:
-        return False
+    if not user_idx.empty:
+        idx = user_idx[0]
+        current_count = int(df.at[idx, "Usage_Count"]) if pd.notnull(df.at[idx, "Usage_Count"]) else 0
+        new_count = current_count + num
 
-    records = sheet.get_all_records()
-    for i, record in enumerate(records, start=2):
-        if str(record.get("Email", "")).lower() == email.lower():
-            try:
-                expiry = datetime.datetime.strptime(record.get("Trial Ends"), "%Y-%m-%d").date()
-            except Exception:
-                expiry = today + datetime.timedelta(days=TRIAL_DAYS)
-
-            if today > expiry:
-                return False
-
-            used = int(record.get("Listings Generated", 0)) + 1
-            try:
-                # Update listings count
-                sheet.update_cell(i, 4, used)  # Column 4 = Listings Generated
-                # Log listing in history sheet
-                append_listing_history(email, str(today), "-", "-", "-", listing_text[:300])
-                return True
-            except Exception as e:
-                print(f"⚠️ Error updating usage: {e}")
-                return False
-
-    # User not found → create new row
-    try:
-        sheet.append_row([email, str(today), str(today + datetime.timedelta(days=TRIAL_DAYS)), 1])
-        append_listing_history(email, str(today), "-", "-", "-", listing_text[:300])
-        return True
-    except Exception as e:
-        print(f"⚠️ Could not create new user row: {e}")
-        return False
-
+        # Update sheet
+        append_to_google_sheet("User_Activity", {
+            "Email": email,
+            "Start_Date": df.at[idx, "Start_Date"].strftime("%Y-%m-%d") if pd.notnull(df.at[idx, "Start_Date"]) else datetime.today().strftime("%Y-%m-%d"),
+            "Expiry_Date": df.at[idx, "Expiry_Date"].strftime("%Y-%m-%d") if pd.notnull(df.at[idx, "Expiry_Date"]) else (datetime.today() + timedelta(days=TRIAL_DAYS)).strftime("%Y-%m-%d"),
+            "Status": "active" if datetime.today() <= pd.to_datetime(df.at[idx, "Expiry_Date"]) else "expired",
+            "Usage_Count": new_count
+        })
+        return new_count
+    else:
+        # If user somehow doesn't exist, create new
+        status, expiry, usage_count = ensure_user_and_get_status(email)
+        return increment_usage(email, num)
 
 # ----------------------
-# Convenience Wrappers
+def get_remaining_days(email: str):
+    """
+    Returns number of days left in trial.
+    """
+    df = get_user_activity_data()
+    user_row = df[df["Email"].str.lower() == email.lower()]
+
+    if user_row.empty:
+        return 0
+
+    expiry_date = pd.to_datetime(user_row.iloc[0]["Expiry_Date"])
+    remaining = (expiry_date - datetime.today()).days
+    return max(0, remaining)
+
 # ----------------------
-def get_trial_status(email):
-    """Return trial status, expiry date, and usage count."""
-    return ensure_user_and_get_status(email)
-
-
-def get_recent_user_listings(email, limit=10):
+def reset_trial(email: str):
     """
-    Returns the most recent listings for a user from the history sheet.
+    Reset trial for testing/admin purposes.
     """
-    sheet = get_sheet()
-    if not sheet:
-        return []
-
-    ss = sheet.spreadsheet
-    try:
-        history = ss.worksheet("Listings History")
-    except Exception:
-        return []
-
-    rows = history.get_all_records()
-    user_rows = [r for r in rows if str(r.get("Email", "")).lower() == email.lower()]
-    return user_rows[::-1][:limit]
+    start_date = datetime.today()
+    expiry_date = start_date + timedelta(days=TRIAL_DAYS)
+    append_to_google_sheet("User_Activity", {
+        "Email": email,
+        "Start_Date": start_date.strftime("%Y-%m-%d"),
+        "Expiry_Date": expiry_date.strftime("%Y-%m-%d"),
+        "Status": "new",
+        "Usage_Count": 0
+    })

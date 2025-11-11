@@ -1,10 +1,14 @@
+# backend/sheet_utils.py
 import os
 import json
 import gspread
 import pandas as pd
 from google.oauth2.service_account import Credentials
+from datetime import datetime, timedelta
 
+# ----------------------
 # Google Sheet URL
+# ----------------------
 SHEET_URL = "https://docs.google.com/spreadsheets/d/12UDiRnjQXwxcHFjR3SWdz8lB45-OTGHBzm3YVcExnsQ/edit"
 
 # ----------------------
@@ -38,171 +42,107 @@ def get_sheet(tab_name=None):
         print(f"⚠️ Could not connect to Google Sheet: {e}")
         return None
 
-
 # ----------------------
-# Ensure Social_Media Tab Exists
+# Ensure Tab Exists
 # ----------------------
-def ensure_social_media_tab():
+def ensure_tab(tab_name, columns=None):
     """
-    Checks if 'Social_Media' tab exists; creates it if missing with correct columns.
-    """
-    try:
-        sheet = get_sheet()
-        if not sheet:
-            return None
-        ss = sheet.spreadsheet
-        try:
-            return ss.worksheet("Social_Media")
-        except gspread.exceptions.WorksheetNotFound:
-            ws = ss.add_worksheet(title="Social_Media", rows=1000, cols=10)
-            ws.append_row(["Email", "Date", "Platform", "Make", "Model", "Reach", "Impressions", "Revenue", "Conversions", "Ad Cost"])
-            print("✅ Created new 'Social_Media' tab with correct columns.")
-            return ws
-    except Exception as e:
-        print(f"⚠️ Could not ensure Social_Media tab: {e}")
-        return None
-
-
-# ----------------------
-# Append a row to a Google Sheet
-# ----------------------
-def append_to_google_sheet(sheet_name, data_dict):
-    """
-    Appends a dictionary of data to a sheet.
+    Ensures a worksheet exists. Creates it with columns if missing.
+    Returns the worksheet object.
     """
     sheet = get_sheet()
     if not sheet:
-        return False
-
+        return None
+    ss = sheet.spreadsheet
     try:
-        ss = sheet.spreadsheet
-        try:
-            ws = ss.worksheet(sheet_name)
-        except gspread.exceptions.WorksheetNotFound:
-            ws = ss.add_worksheet(title=sheet_name, rows=2000, cols=20)
-            ws.append_row(list(data_dict.keys()))
+        ws = ss.worksheet(tab_name)
+    except gspread.exceptions.WorksheetNotFound:
+        ws = ss.add_worksheet(title=tab_name, rows=2000, cols=20)
+        if columns:
+            ws.append_row(columns)
+        print(f"✅ Created new '{tab_name}' tab with columns: {columns}")
+    return ws
+
+# ----------------------
+# Append to Sheet
+# ----------------------
+def append_to_google_sheet(sheet_name, data_dict):
+    """
+    Appends a dictionary to a sheet. Creates sheet if missing.
+    """
+    ws = ensure_tab(sheet_name, columns=list(data_dict.keys()))
+    if not ws:
+        return False
+    try:
         ws.append_row(list(data_dict.values()))
         return True
     except Exception as e:
         print(f"⚠️ Could not append to sheet {sheet_name}: {e}")
         return False
 
-
 # ----------------------
-# Append to listing history
-# ----------------------
-def append_listing_history(email, date, car_text, price, tone, listing_snippet):
-    """
-    Append user listing info to 'Listings History'.
-    """
-    sheet = get_sheet()
-    if not sheet:
-        return False
-    try:
-        ss = sheet.spreadsheet
-        try:
-            history_ws = ss.worksheet("Listings History")
-        except gspread.exceptions.WorksheetNotFound:
-            history_ws = ss.add_worksheet(title="Listings History", rows=2000, cols=6)
-            history_ws.append_row(["Email", "Date", "Car", "Price", "Tone", "Listing"])
-        history_ws.append_row([email, date, car_text, price, tone, listing_snippet])
-        return True
-    except Exception as e:
-        print(f"⚠️ Could not append to Listings History: {e}")
-        return False
-
-
-# ----------------------
-# Fetch sheet data as DataFrame
+# Fetch Sheet Data as DataFrame
 # ----------------------
 def get_sheet_data(sheet_name):
     """
     Returns the given worksheet as a Pandas DataFrame.
     """
-    sheet = get_sheet()
-    if not sheet:
+    ws = get_sheet(sheet_name)
+    if not ws:
         return pd.DataFrame()
     try:
-        ss = sheet.spreadsheet
-        try:
-            ws = ss.worksheet(sheet_name)
-        except gspread.exceptions.WorksheetNotFound:
-            return pd.DataFrame()
         records = ws.get_all_records()
         return pd.DataFrame(records)
     except Exception as e:
         print(f"⚠️ Could not fetch data from {sheet_name}: {e}")
         return pd.DataFrame()
 
-
 # ----------------------
-# Listing history DataFrame
+# Listings History
 # ----------------------
 def get_listing_history_df():
     """
-    Fetch 'Listings History' as a DataFrame.
+    Returns 'Listings History' as DataFrame.
     """
-    sheet = get_sheet()
-    if not sheet:
-        return pd.DataFrame()
+    ws = ensure_tab("Listings History", columns=["Email", "Date", "Car", "Price", "Tone", "Listing"])
     try:
-        ss = sheet.spreadsheet
-        history_ws = ss.worksheet("Listings History")
-        records = history_ws.get_all_records()
+        records = ws.get_all_records()
         return pd.DataFrame(records)
-    except gspread.exceptions.WorksheetNotFound:
+    except Exception as e:
+        print(f"⚠️ Could not fetch Listings History: {e}")
         return pd.DataFrame()
 
-
-# ----------------------
-# User activity DataFrame
-# ----------------------
-from datetime import datetime, timedelta
-
-def ensure_user_and_get_status(user_email, sheet):
+def append_listing_history(email, date, car_text, price, tone, listing_snippet):
     """
-    Ensures user exists and returns their trial status.
-    If the user already exists, their trial period continues from original signup.
+    Append listing to 'Listings History'.
     """
-    users = sheet.get_all_records()
-    today = datetime.utcnow().date()
-
-    # Check if user already exists
-    for user in users:
-        if user["email"].lower() == user_email.lower():
-            start_date = datetime.strptime(user["start_date"], "%Y-%m-%d").date()
-            days_used = (today - start_date).days
-            remaining_days = max(0, 30 - days_used)
-            is_active = remaining_days > 0
-            return is_active, remaining_days, start_date
-
-    # Otherwise create a new user record
-    start_date = today
-    expiry = start_date + timedelta(days=30)
-    sheet.append_row([user_email, start_date.strftime("%Y-%m-%d"), expiry.strftime("%Y-%m-%d"), "active"])
-    return True, 30, start_date
-
-
+    data = {
+        "Email": email,
+        "Date": date,
+        "Car": car_text,
+        "Price": price,
+        "Tone": tone,
+        "Listing": listing_snippet
+    }
+    return append_to_google_sheet("Listings History", data)
 
 # ----------------------
 # Social Media Data
 # ----------------------
 def get_social_media_data(sheet_name="Social_Media"):
     """
-    Fetch social media analytics from Google Sheet or fallback to demo data.
-    Columns expected: Email, Date, Platform, Make, Model, Reach, Impressions, Revenue, Conversions, Ad Cost
+    Returns social media analytics DataFrame.
+    Auto-creates sheet if missing.
     """
-    ws = ensure_social_media_tab()
+    ws = ensure_tab(sheet_name, columns=["Email", "Date", "Platform", "Make", "Model", "Reach", "Impressions", "Revenue", "Conversions", "Ad Cost"])
     df = pd.DataFrame()
+    try:
+        records = ws.get_all_records()
+        df = pd.DataFrame(records)
+    except Exception as e:
+        print(f"⚠️ Could not fetch Social_Media records: {e}")
 
-    if ws:
-        try:
-            records = ws.get_all_records()
-            df = pd.DataFrame(records)
-        except Exception as e:
-            print(f"⚠️ Could not fetch Social_Media records: {e}")
-
-    # If still empty, fallback demo
+    # Fallback demo data
     if df.empty:
         df = pd.DataFrame([
             {"Make": "BMW", "Model": "X5", "Platform": "Instagram", "Reach": 4500, "Impressions": 12000, "Revenue": 52000, "Conversions": 12, "Ad Cost": 4000, "Date": pd.Timestamp.today()},
@@ -212,12 +152,10 @@ def get_social_media_data(sheet_name="Social_Media"):
             {"Make": "VW", "Model": "Golf", "Platform": "TikTok", "Reach": 5000, "Impressions": 13000, "Revenue": 56000, "Conversions": 15, "Ad Cost": 4200, "Date": pd.Timestamp.today()},
         ])
 
-    # Convert columns to correct data types
+    # Convert types
     for col in ["Reach", "Impressions", "Revenue", "Conversions", "Ad Cost"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-
-    # Ensure Date column
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     else:
@@ -225,23 +163,31 @@ def get_social_media_data(sheet_name="Social_Media"):
 
     return df
 
+# ----------------------
+# User Activity
+# ----------------------
+def get_user_activity_data():
+    """
+    Returns 'User_Activity' as DataFrame.
+    Creates sheet if missing.
+    """
+    ws = ensure_tab("User_Activity", columns=["Email", "Start_Date", "Expiry_Date", "Status", "Usage_Count"])
+    try:
+        records = ws.get_all_records()
+        df = pd.DataFrame(records)
+    except Exception as e:
+        print(f"⚠️ Could not fetch User_Activity: {e}")
+        df = pd.DataFrame()
 
-# ----------------------
-# Social Media Filtering
-# ----------------------
-def filter_social_media(df, make=None, model=None, min_price=None, max_price=None, fuel=None):
-    """
-    Filter social media DataFrame based on dealer query.
-    """
-    filtered = df.copy()
-    if make:
-        filtered = filtered[filtered["Make"].str.lower() == make.lower()]
-    if model:
-        filtered = filtered[filtered["Model"].str.lower() == model.lower()]
-    if min_price is not None:
-        filtered = filtered[filtered["Revenue"] >= min_price]
-    if max_price is not None:
-        filtered = filtered[filtered["Revenue"] <= max_price]
-    if fuel and "Fuel" in df.columns:
-        filtered = filtered[df["Fuel"].str.lower() == fuel.lower()]
-    return filtered
+    if df.empty:
+        df = pd.DataFrame(columns=["Email", "Start_Date", "Expiry_Date", "Status", "Usage_Count"])
+
+    # Convert dates
+    for col in ["Start_Date", "Expiry_Date"]:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors="coerce")
+
+    if "Usage_Count" in df.columns:
+        df["Usage_Count"] = pd.to_numeric(df["Usage_Count"], errors="coerce").fillna(0)
+
+    return df
