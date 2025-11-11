@@ -118,6 +118,8 @@ if user_email:
 
     if is_active:
         st.sidebar.markdown('<span style="color:#10b981;">🟢 Trial Active</span>', unsafe_allow_html=True)
+        st.sidebar.markdown(f"**📅 Trial Ends:** {expiry_date.strftime('%B %d, %Y')} ({remaining_days} days left)")
+
     else:
         st.sidebar.markdown('<span style="color:#ef4444;">🔴 Trial Expired</span>', unsafe_allow_html=True)
         st.sidebar.warning("Your trial has ended. Upgrade below to continue using DealerCommand.")

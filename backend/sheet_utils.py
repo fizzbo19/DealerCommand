@@ -157,22 +157,31 @@ def get_listing_history_df():
 # ----------------------
 # User activity DataFrame
 # ----------------------
-def get_user_activity_data(user_email):
+from datetime import datetime, timedelta
+
+def ensure_user_and_get_status(user_email, sheet):
     """
-    Return activity for a given user from AI_Metrics sheet.
+    Ensures user exists and returns their trial status.
+    If the user already exists, their trial period continues from original signup.
     """
-    try:
-        df = get_sheet_data("AI_Metrics")
-        if df.empty:
-            return df
-        if "Email" in df.columns:
-            df = df[df["Email"].str.lower() == user_email.lower()]
-        if "Timestamp" not in df.columns:
-            df["Timestamp"] = pd.Timestamp.now()
-        return df
-    except Exception as e:
-        print(f"⚠️ Error fetching user activity: {e}")
-        return pd.DataFrame()
+    users = sheet.get_all_records()
+    today = datetime.utcnow().date()
+
+    # Check if user already exists
+    for user in users:
+        if user["email"].lower() == user_email.lower():
+            start_date = datetime.strptime(user["start_date"], "%Y-%m-%d").date()
+            days_used = (today - start_date).days
+            remaining_days = max(0, 30 - days_used)
+            is_active = remaining_days > 0
+            return is_active, remaining_days, start_date
+
+    # Otherwise create a new user record
+    start_date = today
+    expiry = start_date + timedelta(days=30)
+    sheet.append_row([user_email, start_date.strftime("%Y-%m-%d"), expiry.strftime("%Y-%m-%d"), "active"])
+    return True, 30, start_date
+
 
 
 # ----------------------
