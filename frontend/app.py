@@ -11,7 +11,7 @@ import plotly.graph_objects as go
 # Local imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from backend.trial_manager import ensure_user_and_get_status, increment_usage
-from backend.sheet_utils import append_to_google_sheet, get_user_activity_data, get_social_media_data
+from backend.sheet_utils import append_to_google_sheet, get_user_activity_data
 from backend.stripe_utils import create_checkout_session
 
 # ----------------------
@@ -54,7 +54,6 @@ body { background-color: #f9fafb; color: #111827; font-family: 'Inter', sans-ser
 .footer { text-align: center; color: #9ca3af; font-size: 0.9rem; margin-top: 3rem; }
 .card { background: linear-gradient(135deg, #ffffff, #f0f4f8); border-radius: 16px; padding: 1.2rem; box-shadow: 0 6px 20px rgba(0,0,0,0.08); margin-bottom: 1.5rem; transition: transform 0.3s ease, box-shadow 0.3s ease; position: relative; }
 .card:hover { transform: translateY(-5px); box-shadow: 0 12px 30px rgba(0,0,0,0.12); }
-.card img { border-radius: 12px; }
 .ribbon { position: absolute; top: -10px; right: -10px; background: #10b981; color: white; padding: 0.4rem 1rem; font-weight: 600; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
 .feature-icon { display: inline-block; background: #2563eb; color: white; border-radius: 50%; width: 22px; height: 22px; text-align: center; line-height: 22px; margin-right: 6px; font-size: 14px; }
 </style>
@@ -100,6 +99,41 @@ if user_email:
         st.sidebar.markdown(f"<span style='color:#10b981;'>🟢 Trial Active</span>", unsafe_allow_html=True)
         st.sidebar.markdown(f"**⏳ Days Remaining:** {remaining_days} days")
         st.sidebar.markdown(f"**📅 Trial Ends:** {expiry_date.strftime('%B %d, %Y')}")
+
+        # ----------------------
+        # SIDEBAR PRICING PLANS
+        # ----------------------
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 💳 Upgrade Your Plan")
+        st.sidebar.markdown("Choose the plan that fits your dealership best:")
+
+        # Starter Plan
+        with st.sidebar.expander("🚗 Premium – £29.99/mo"):
+            st.markdown("""
+            - Generate up to **30 listings/month**  
+            - Basic analytics dashboard  
+            - Email support  
+            """)
+            if user_email:
+                checkout_url = create_checkout_session(user_email, plan="starter")
+                st.markdown(f"[🔗 Upgrade to Premium]({checkout_url})", unsafe_allow_html=True)
+            else:
+                st.info("Enter your email above to enable checkout link.")
+
+        # Pro Plan
+        with st.sidebar.expander("⚡ Pro – £59.99/mo"):
+            st.markdown("""
+            - **Unlimited listings**  
+            - Advanced analytics  
+            - Priority email + chat support  
+            - Social media content generator  
+            """)
+            if user_email:
+                checkout_url = create_checkout_session(user_email, plan="pro")
+                st.markdown(f"[🚀 Upgrade to Pro]({checkout_url})", unsafe_allow_html=True)
+            else:
+                st.info("Enter your email above to enable checkout link.")
+
     else:
         st.sidebar.markdown(f"<span style='color:#ef4444;'>🔴 Trial Expired</span>", unsafe_allow_html=True)
         st.sidebar.warning("Your trial has ended. Upgrade below to continue using DealerCommand.")
@@ -108,21 +142,31 @@ if user_email:
         # SIDEBAR UPGRADE PLANS
         # ----------------------
         st.sidebar.markdown("### 💳 Choose Your Plan")
-        calendly_link = "https://calendly.com/fizmaygroup-info/30min"
 
-        def sidebar_upgrade_button(plan_name, plan_label, plan_price):
-            checkout_url = create_checkout_session(user_email, plan=plan_name)
-            st.sidebar.markdown(f"""
-            <div class="plan-card">
-                <div class="plan-title">{plan_label}</div>
-                <div class="plan-price">£{plan_price} / mo</div>
-                <a href="{checkout_url}" target="_blank" class="plan-btn btn-premium">Upgrade</a>
-            </div>
-            """, unsafe_allow_html=True)
+        # Premium Plan
+        with st.sidebar.expander("🚗 Premium – £29.99/mo"):
+            st.markdown("""
+            - Unlimited listings with Full AI assistant  
+            - Advanced Analytics
+            - Team Management
+            - Priority Support  
+            """)
+            checkout_url = create_checkout_session(user_email, plan="starter")
+            st.markdown(f"[🔗 Upgrade to Premium]({checkout_url})", unsafe_allow_html=True)
 
-        st.sidebar.markdown(f"""
-        <a href="{calendly_link}" target="_blank" class="plan-btn btn-consult">📅 Book Free 30-min Consultation</a>
-        """, unsafe_allow_html=True)
+        # Pro Plan
+        with st.sidebar.expander("⚡ Pro – £59.99/mo"):
+            st.markdown("""
+            - **Everything Included In Premium**  
+            - Unlock Advanced Analytics With AI SEO Integration 
+            - Cross-Platform Insights 
+            - Priority Email + Chat Support  
+            - Social Media Content Generator 
+            - Custom Reporting Tools To Supercharge Your dealership’s Performance 
+            """)
+            checkout_url = create_checkout_session(user_email, plan="pro")
+            st.markdown(f"[🚀 Upgrade to Pro]({checkout_url})", unsafe_allow_html=True)
+
         st.sidebar.markdown("---")
         st.sidebar.markdown("💬 **Need help?** [Contact support](mailto:info@dealercommand.tech)")
 
@@ -230,6 +274,7 @@ Include emojis and SEO flair.
             st.dataframe(activity_data)
         except Exception as e:
             st.error(f"⚠️ Could not load user activity: {e}")
+
 else:
     st.info("👋 Enter your dealership email above to begin your 30-day Pro trial.")
 
@@ -240,3 +285,4 @@ st.markdown(
     '<div class="footer">© 2025 DealerCommand AI — Powered by FizMay Group</div>', 
     unsafe_allow_html=True
 )
+
