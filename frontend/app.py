@@ -1,4 +1,3 @@
-# frontend/app.py
 import sys, os, json, time
 from datetime import datetime
 import streamlit as st
@@ -31,15 +30,10 @@ LOGO_FILE = os.path.join(ASSETS_DIR, "dealercommand_logov1.png")
 
 if os.path.exists(LOGO_FILE):
     st.sidebar.image(LOGO_FILE, width=160, caption="DealerCommand AI")
-    st.markdown(f"""
-    <div style="display:flex; justify-content:center; align-items:center; margin-top:1rem; margin-bottom:1rem;">
-        <img src="{LOGO_FILE}" alt="DealerCommand AI Logo" width="200" style="border-radius:12px;">
-    </div>
-    """, unsafe_allow_html=True)
 else:
     st.sidebar.markdown("**DealerCommand AI**")
-    st.markdown('<h2 style="text-align:center;">🚗 DealerCommand AI</h2>', unsafe_allow_html=True)
 
+st.markdown('<h2 style="text-align:center;">🚗 DealerCommand AI</h2>', unsafe_allow_html=True)
 st.markdown('<div class="hero-sub">Create high-converting, SEO-optimised car listings in seconds with AI.</div>', unsafe_allow_html=True)
 
 # ----------------------
@@ -50,12 +44,9 @@ st.markdown("""
 body { background-color: #f9fafb; color: #111827; font-family: 'Inter', sans-serif; }
 .stButton > button { background: linear-gradient(90deg, #2563eb, #1e40af); color: white; border-radius: 10px; padding: 0.6rem 1.4rem; font-weight: 600; border: none; transition: 0.2s ease-in-out; }
 .stButton > button:hover { background: linear-gradient(90deg, #1e40af, #2563eb); transform: scale(1.02); }
-.stDownloadButton > button { background: #10b981; color: white; border-radius: 8px; font-weight: 500; }
 .footer { text-align: center; color: #9ca3af; font-size: 0.9rem; margin-top: 3rem; }
 .card { background: linear-gradient(135deg, #ffffff, #f0f4f8); border-radius: 16px; padding: 1.2rem; box-shadow: 0 6px 20px rgba(0,0,0,0.08); margin-bottom: 1.5rem; transition: transform 0.3s ease, box-shadow 0.3s ease; position: relative; }
 .card:hover { transform: translateY(-5px); box-shadow: 0 12px 30px rgba(0,0,0,0.12); }
-.ribbon { position: absolute; top: -10px; right: -10px; background: #10b981; color: white; padding: 0.4rem 1rem; font-weight: 600; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
-.feature-icon { display: inline-block; background: #2563eb; color: white; border-radius: 50%; width: 22px; height: 22px; text-align: center; line-height: 22px; margin-right: 6px; font-size: 14px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -69,120 +60,125 @@ if not api_key:
     st.error("⚠️ Missing OpenAI key — set `OPENAI_API_KEY` in Render environment.")
     st.stop()
 
-# ==========================================================
-# 🎯 DEALERCOMMAND SUBSCRIPTION LOGIC
-# ==========================================================
 if user_email:
     status, expiry, usage_count = ensure_user_and_get_status(user_email)
     is_active = status in ["active", "new"]
 
-    # Convert expiry to datetime if needed
-    if isinstance(expiry, str):
-        expiry_date = datetime.strptime(expiry, "%Y-%m-%d")
-    else:
-        expiry_date = expiry
-
+    expiry_date = datetime.strptime(expiry, "%Y-%m-%d") if isinstance(expiry, str) else expiry
     remaining_days = (expiry_date - datetime.now()).days
 
-    # ----------------------
-    # SIDEBAR DASHBOARD
-    # ----------------------
-    st.sidebar.title("⚙️ Dashboard")
-    st.sidebar.markdown(f"**👤 User:** {user_email}")
-    st.sidebar.markdown(f"**📊 Listings Used:** {usage_count} / 15")
-    st.sidebar.progress(int(min((usage_count / 15) * 100, 100)))
+    # Sidebar Tabs
+    sidebar_tabs = st.sidebar.tabs(["🎯 Trial Overview", "💳 Upgrade Plans", "⚙️ User Settings"])
 
     # ----------------------
-    # SIDEBAR TRIAL STATUS
+    # TRIAL OVERVIEW TAB
     # ----------------------
-    if is_active and remaining_days > 0:
-        st.sidebar.markdown(f"<span style='color:#10b981;'>🟢 Trial Active</span>", unsafe_allow_html=True)
-        st.sidebar.markdown(f"**⏳ Days Remaining:** {remaining_days} days")
-        st.sidebar.markdown(f"**📅 Trial Ends:** {expiry_date.strftime('%B %d, %Y')}")
+    with sidebar_tabs[0]:
+        st.markdown("### 🎯 Your DealerCommand Trial")
+        st.markdown(f"**👤 Email:** `{user_email}`")
+        st.markdown(f"**📊 Listings Used:** `{usage_count}` / 15")
+        st.progress(int(min((usage_count / 15) * 100, 100)))
 
-        # ----------------------
-        # SIDEBAR PRICING PLANS
-        # ----------------------
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("### 💳 Upgrade Your Plan")
-        st.sidebar.markdown("Choose the plan that fits your dealership best:")
+        if is_active and remaining_days > 0:
+            st.markdown(f"**🟢 Status:** Active Trial")
+            st.markdown(f"**⏳ Days Remaining:** `{remaining_days}` days")
+            st.markdown(f"**📅 Ends On:** `{expiry_date.strftime('%B %d, %Y')}`")
+        else:
+            st.error("🚫 Your trial has expired. Upgrade to continue using DealerCommand.")
 
-        # Starter Plan
-        with st.sidebar.expander("🚗 Premium – £29.99/mo"):
+    # ----------------------
+    # UPGRADE PLANS TAB
+    # ----------------------
+    with sidebar_tabs[1]:
+        st.markdown("### 💳 Upgrade Your Plan")
+        st.caption("Select a plan to unlock more listings, analytics, and support.")
+
+        # --- Starter Plan ---
+        st.markdown("#### 🚀 Starter Plan – £29/month")
+        st.markdown("""
+        **Perfect for independent dealers and small teams.**  
+        - Up to 50 listings/month  
+        - Basic analytics dashboard  
+        - Email support  
+        """)
+        if st.button("Upgrade to Starter (£29/mo)", key="starter_plan_btn"):
+            checkout_url = create_checkout_session(user_email, plan="starter")
+            st.success("Redirecting to payment page...")
+            st.markdown(f"[Proceed to Checkout]({checkout_url})", unsafe_allow_html=True)
+            time.sleep(1)
+
+        st.markdown("---")
+
+        # --- Pro Plan ---
+        st.markdown("#### 💼 Pro Plan – £59/month")
+        st.markdown("""
+        **Ideal for growing dealerships and marketing professionals.**  
+        - Unlimited listings  
+        - Advanced analytics  
+        - Team access  
+        - Priority support  
+        """)
+        if st.button("Upgrade to Pro (£59/mo)", key="pro_plan_btn"):
+            checkout_url = create_checkout_session(user_email, plan="pro")
+            st.success("Redirecting to payment page...")
+            st.markdown(f"[Proceed to Checkout]({checkout_url})", unsafe_allow_html=True)
+            time.sleep(1)
+
+        st.markdown("---")
+        st.info("Need help choosing a plan? [Book a free consultation](https://www.carfundo.com/contact) 📞")
+
+        # --- Keep your existing Premium & Pro Expander Plans ---
+        with st.expander("🚗 Premium – £29.99/month"):
             st.markdown("""
-            - Generate up to **30 listings/month**  
-            - Basic analytics dashboard  
-            - Email support  
+            **Perfect for independent dealers & small teams.**  
+            - Unlimited car listings with full AI assistant  
+            - Advanced analytics dashboard  
+            - Team management features  
+            - Priority email support  
+            - Export to AutoTrader, Facebook & eBay  
+            - Weekly dealership insights reports  
             """)
             if user_email:
-                checkout_url = create_checkout_session(user_email, plan="starter")
+                checkout_url = create_checkout_session(user_email, plan="premium")
                 st.markdown(f"[🔗 Upgrade to Premium]({checkout_url})", unsafe_allow_html=True)
-            else:
-                st.info("Enter your email above to enable checkout link.")
 
-        # Pro Plan
-        with st.sidebar.expander("⚡ Pro – £59.99/mo"):
+        with st.expander("⚡ Pro – £59.99/month"):
             st.markdown("""
-            - **Unlimited listings**  
-            - Advanced analytics  
-            - Priority email + chat support  
-            - Social media content generator  
+            **Best for multi-location dealerships & power users.**  
+            - Everything in Premium  
+            - Advanced AI SEO optimisation tools  
+            - Cross-platform marketing insights  
+            - Priority email + live chat support  
+            - Custom reporting & performance dashboards  
+            - Social media content generation suite  
+            - Dedicated account manager  
             """)
             if user_email:
                 checkout_url = create_checkout_session(user_email, plan="pro")
                 st.markdown(f"[🚀 Upgrade to Pro]({checkout_url})", unsafe_allow_html=True)
-            else:
-                st.info("Enter your email above to enable checkout link.")
 
-    else:
-        st.sidebar.markdown(f"<span style='color:#ef4444;'>🔴 Trial Expired</span>", unsafe_allow_html=True)
-        st.sidebar.warning("Your trial has ended. Upgrade below to continue using DealerCommand.")
-
-        # ----------------------
-        # SIDEBAR UPGRADE PLANS
-        # ----------------------
-        st.sidebar.markdown("### 💳 Choose Your Plan")
-
-        # Premium Plan
-        with st.sidebar.expander("🚗 Premium – £29.99/mo"):
-            st.markdown("""
-            - Unlimited listings with Full AI assistant  
-            - Advanced Analytics
-            - Team Management
-            - Priority Support  
-            """)
-            checkout_url = create_checkout_session(user_email, plan="starter")
-            st.markdown(f"[🔗 Upgrade to Premium]({checkout_url})", unsafe_allow_html=True)
-
-        # Pro Plan
-        with st.sidebar.expander("⚡ Pro – £59.99/mo"):
-            st.markdown("""
-            - **Everything Included In Premium**  
-            - Unlock Advanced Analytics With AI SEO Integration 
-            - Cross-Platform Insights 
-            - Priority Email + Chat Support  
-            - Social Media Content Generator 
-            - Custom Reporting Tools To Supercharge Your dealership’s Performance 
-            """)
-            checkout_url = create_checkout_session(user_email, plan="pro")
-            st.markdown(f"[🚀 Upgrade to Pro]({checkout_url})", unsafe_allow_html=True)
-
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("💬 **Need help?** [Contact support](mailto:info@dealercommand.tech)")
+        st.markdown("---")
+        st.info("Need help choosing? Email us at [info@dealercommand.tech](mailto:info@dealercommand.tech)")
 
     # ----------------------
-    # TABS: Listings | Analytics | Activity
+    # USER SETTINGS TAB
     # ----------------------
-    tabs = st.tabs(["🧾 Generate Listing", "📊 Analytics Dashboard", "📈 User Activity"])
+    with sidebar_tabs[2]:
+        st.markdown("### ⚙️ Account Settings")
+        st.caption("View and manage your current plan and activity.")
+        st.markdown(f"**Current Status:** `{status}`")
+        st.markdown(f"**Trial Expiry:** `{expiry_date.strftime('%Y-%m-%d')}`")
+        st.markdown(f"**Total Listings Used:** `{usage_count}`")
 
     # ----------------------
-    # TAB 1: LISTING GENERATOR
+    # MAIN CONTENT TABS
     # ----------------------
-    with tabs[0]:
+    main_tabs = st.tabs(["🧾 Generate Listing", "📊 Analytics Dashboard", "📈 User Activity"])
+
+    # --- Generate Listing ---
+    with main_tabs[0]:
         if is_active and remaining_days > 0:
             st.markdown("### 🧾 Generate a New Listing")
-            st.caption("Complete the details below and let AI handle the rest.")
-
             with st.form("listing_form"):
                 col1, col2 = st.columns(2)
                 with col1:
@@ -217,10 +213,10 @@ if user_email:
                     st.info(f"💡 Suggested SEO Titles:\n{seo_titles}")
 
                     prompt = f"""
-Write a 100–150 word engaging car listing:
+Write a 120–150 word engaging car listing:
 {year} {make} {model}, {mileage}, {color}, {fuel}, {transmission}, {price}.
 Features: {features}. Dealer Notes: {notes}.
-Include emojis and SEO flair.
+Include emojis and SEO-rich phrasing.
 """
                     start_time = time.time()
                     with st.spinner("🤖 Generating your listing..."):
@@ -236,7 +232,6 @@ Include emojis and SEO flair.
 
                     st.success("✅ Listing generated successfully!")
                     duration = time.time() - start_time
-
                     st.markdown(f"**Generated Listing:**\n\n{listing_text}")
                     st.download_button("⬇ Download Listing", listing_text, file_name="listing.txt")
 
@@ -244,30 +239,25 @@ Include emojis and SEO flair.
                         "Email": user_email,
                         "Timestamp": datetime.now().isoformat(),
                         "Model": "gpt-4o-mini",
-                        "Response Time (s)": round(duration,2),
+                        "Response Time (s)": round(duration, 2),
                         "Make": make,
                         "Model Name": model,
                         "Year": year
                     }
                     append_to_google_sheet("AI_Metrics", ai_metrics)
                     increment_usage(user_email, 1)
-
                 except Exception as e:
                     st.error(f"⚠️ Error: {e}")
         else:
             st.warning("⚠️ Your trial has ended. Please upgrade to continue.")
 
-    # ----------------------
-    # TAB 2: ANALYTICS DASHBOARD (placeholder)
-    # ----------------------
-    with tabs[1]:
+    # --- Analytics Dashboard ---
+    with main_tabs[1]:
         st.markdown("### 📊 Social Media Analytics (Premium)")
-        st.info("Upgrade to view performance insights and engagement analytics.")
+        st.info("Upgrade to view engagement analytics, conversion rates, and SEO performance.")
 
-    # ----------------------
-    # TAB 3: USER ACTIVITY
-    # ----------------------
-    with tabs[2]:
+    # --- User Activity ---
+    with main_tabs[2]:
         st.markdown("### 📈 User Activity Overview")
         try:
             activity_data = get_user_activity_data(user_email)
@@ -282,7 +272,6 @@ else:
 # FOOTER
 # ----------------------
 st.markdown(
-    '<div class="footer">© 2025 DealerCommand AI — Powered by FizMay Group</div>', 
+    '<div class="footer">© 2025 DealerCommand AI — Powered by FizMay Group</div>',
     unsafe_allow_html=True
 )
-
