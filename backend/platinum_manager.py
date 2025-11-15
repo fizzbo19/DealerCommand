@@ -1,7 +1,13 @@
 # backend/platinum_manager.py
 import pandas as pd
-from datetime import datetime
-from backend.sheet_utils import get_inventory_for_user, get_social_media_data, get_sheet_data, append_to_google_sheet
+import numpy as np
+from datetime import datetime, timedelta
+from backend.sheet_utils import (
+    get_inventory_for_user,
+    get_social_media_data,
+    get_sheet_data,
+    append_to_google_sheet
+)
 from openai import OpenAI
 import os
 
@@ -29,20 +35,56 @@ def can_add_listing(email):
     return remaining > 0 or is_platinum(email)
 
 def increment_platinum_usage(email, count=1):
-    # In a full system, update sheet or DB to decrement Remaining_Listings
     from backend.trial_manager import decrement_listing_count
     decrement_listing_count(email, count)
 
 # ----------------------
+# DEMO DATA GENERATOR
+# ----------------------
+def generate_demo_inventory(top_n=5):
+    np.random.seed(42)
+    makes = ["BMW", "Audi", "Mercedes", "Toyota"]
+    models = ["X5", "A3", "C-Class", "Corolla"]
+    colors = ["Red", "Blue", "Black", "White"]
+    demo_listings = []
+    for i in range(top_n):
+        demo_listings.append({
+            "Make": np.random.choice(makes),
+            "Model": np.random.choice(models),
+            "Year": np.random.randint(2015, 2024),
+            "Mileage": np.random.randint(5000, 80000),
+            "Color": np.random.choice(colors),
+            "Fuel": np.random.choice(["Petrol","Diesel","Hybrid"]),
+            "Transmission": np.random.choice(["Manual","Automatic"]),
+            "Price": f"£{np.random.randint(20000,50000)}",
+            "Features": "Demo feature list",
+            "Notes": "Demo dealer notes",
+            "Timestamp": datetime.utcnow() - timedelta(days=np.random.randint(0,30))
+        })
+    return pd.DataFrame(demo_listings)
+
+def generate_demo_social_data():
+    np.random.seed(42)
+    platforms = ["Instagram","TikTok","Facebook"]
+    return pd.DataFrame({
+        "Platform": np.random.choice(platforms, size=5),
+        "Revenue": np.random.randint(100, 1000, size=5),
+        "Reach": np.random.randint(1000, 10000, size=5),
+        "Impressions": np.random.randint(5000, 20000, size=5)
+    })
+
+# ----------------------
 # TOP RECOMMENDATIONS
 # ----------------------
-def get_platinum_top_recommendations(email, top_n=5):
+def get_platinum_top_recommendations(email, top_n=5, demo_mode=False):
+    if demo_mode:
+        return generate_demo_inventory(top_n).to_dict(orient="records")
+
     df = get_inventory_for_user(email)
     if df.empty:
         return []
 
     df = df.copy()
-    # Score by price (higher better) + recency
     df["Price_Num"] = pd.to_numeric(df.get("Price", 0).replace("£","").replace(",",""), errors="coerce").fillna(0)
     df["Timestamp"] = pd.to_datetime(df.get("Timestamp", datetime.utcnow()), errors="coerce")
     df = df.sort_values(["Price_Num", "Timestamp"], ascending=[False, False])
@@ -56,16 +98,19 @@ def get_platinum_remaining_listings(email):
 # ----------------------
 # DASHBOARD
 # ----------------------
-def get_platinum_dashboard(email):
+def get_platinum_dashboard(email, demo_mode=False):
+    inventory_df = generate_demo_inventory() if demo_mode else get_inventory_for_user(email)
+    social_df = generate_demo_social_data() if demo_mode else get_social_media_data(email)
+
     return {
         "Profile": {
             "Email": email,
             "Plan": "Platinum"
         },
-        "Inventory_Count": len(get_inventory_for_user(email)),
+        "Inventory_Count": len(inventory_df),
         "Remaining_Listings": get_platinum_remaining_listings(email),
-        "Top_Recommendations": get_platinum_top_recommendations(email),
-        "Social_Data": get_social_media_data(email)
+        "Top_Recommendations": get_platinum_top_recommendations(email, demo_mode=demo_mode),
+        "Social_Data": social_df.to_dict(orient="records")
     }
 
 # ----------------------
@@ -131,12 +176,12 @@ def competitor_monitoring(email, competitor_csv=None, sheet_name=None):
 # ----------------------
 # WEEKLY CONTENT CALENDAR
 # ----------------------
-def generate_weekly_content_calendar(email, plan="platinum"):
-    inventory_df = get_inventory_for_user(email)
+def generate_weekly_content_calendar(email, plan="platinum", demo_mode=False):
+    inventory_df = generate_demo_inventory() if demo_mode else get_inventory_for_user(email)
     if inventory_df.empty:
         return pd.DataFrame(), "No inventory to generate content calendar."
 
-    top_listings = get_platinum_top_recommendations(email, top_n=5)
+    top_listings = get_platinum_top_recommendations(email, top_n=5, demo_mode=demo_mode)
     week_days = ["Monday","Wednesday","Friday"]
     calendar_rows = []
 

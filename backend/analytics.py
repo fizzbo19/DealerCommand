@@ -109,53 +109,65 @@ def compare_cars(email, car_ids):
     return df.to_dict(orient="records")
 
 # -------------------------------
-# PRO ANALYTICS
+# PRO ANALYTICS WITH DEMO TOGGLE
 # -------------------------------
-def pro_analytics(user_email):
-    df = get_listing_history_df()
-    user_df = df[df["Email"].str.lower() == user_email.lower()]
-    if user_df.empty:
-        return {"error": "No historical listings to analyze."}
+def pro_analytics(user_email, demo_mode=False):
+    if demo_mode:
+        demo_df = generate_demo_data()
+        analytics = {}
 
-    analytics = {}
-    user_df["Price"] = convert_price_series(user_df)
-    user_df = standardize_dates(user_df)
+        # Revenue over time
+        fig1, ax1 = plt.subplots()
+        demo_df.groupby(demo_df['Date'].dt.to_period('M'))['Revenue'].sum().plot(ax=ax1, marker='o', color='purple')
+        ax1.set_title("Revenue Over Time (Demo)")
+        ax1.set_ylabel("Revenue (£)")
+        analytics['chart_revenue_over_time'] = generate_chart_image(fig1)
 
-    # Listings per Make
-    make_counts = user_df["Make"].value_counts()
-    fig1, ax1 = plt.subplots()
-    make_counts.plot(kind='bar', ax=ax1, color='skyblue')
-    ax1.set_title("Number of Listings per Make")
-    ax1.set_ylabel("Listings")
-    analytics['chart_listings_per_make'] = generate_chart_image(fig1)
+        # Listings per Make
+        fig2, ax2 = plt.subplots()
+        demo_df['Make'].value_counts().plot(kind='bar', ax=ax2, color='skyblue')
+        ax2.set_title("Listings per Make (Demo)")
+        analytics['chart_listings_per_make'] = generate_chart_image(fig2)
 
-    # Average Price per Make
-    avg_price_make = user_df.groupby("Make")["Price"].mean()
-    fig2, ax2 = plt.subplots()
-    avg_price_make.plot(kind='bar', ax=ax2, color='orange')
-    ax2.set_title("Average Price per Make")
-    ax2.set_ylabel("Price (£)")
-    analytics['chart_avg_price_per_make'] = generate_chart_image(fig2)
+        # Average Price per Make
+        fig3, ax3 = plt.subplots()
+        demo_df.groupby("Make")["Price"].mean().plot(kind='bar', ax=ax3, color='orange')
+        ax3.set_title("Average Price per Make (Demo)")
+        analytics['chart_avg_price_per_make'] = generate_chart_image(fig3)
 
-    # Top Models by Count
-    top_models = user_df["Model"].value_counts().head(5)
-    fig3, ax3 = plt.subplots()
-    top_models.plot(kind='bar', ax=ax3, color='green')
-    ax3.set_title("Top 5 Models by Listings")
-    ax3.set_ylabel("Listings")
-    analytics['chart_top_models'] = generate_chart_image(fig3)
+        # Top Models
+        fig4, ax4 = plt.subplots()
+        demo_df['Model'].value_counts().head(5).plot(kind='bar', ax=ax4, color='green')
+        ax4.set_title("Top 5 Models by Listings (Demo)")
+        analytics['chart_top_models'] = generate_chart_image(fig4)
 
-    # Recommendations
-    most_common_make = user_df["Make"].mode()[0]
-    top_model = user_df["Model"].mode()[0]
-    avg_price = user_df["Price"].mean()
-    analytics['recommendations'] = [
-        f"🚗 Focus on your most listed make: {most_common_make}",
-        f"🏎️ Promote your top performing model: {top_model}",
-        f"💰 Average listing price is £{int(avg_price)} — consider optimizing pricing."
-    ]
+        analytics['recommendations'] = [
+            "🚗 Focus on your most listed make: BMW",
+            "🏎️ Promote your top performing model: X5",
+            "💰 Average listing price is £35,000 — consider optimizing pricing."
+        ]
+        return analytics
 
-    return analytics
+    # fallback to real user data if demo_mode=False
+    return pro_analytics_real(user_email)  # We'll wrap the original pro_analytics logic here
+
+# -------------------------------
+# STREAMLIT-FRIENDLY CHARTS (UPDATED)
+# -------------------------------
+def render_charts_for_streamlit(user_email, plan="pro", demo_mode=False):
+    plan = plan.lower()
+    if plan == "platinum":
+        analytics_data = platinum_analytics(user_email)
+    elif plan == "pro":
+        analytics_data = pro_analytics(user_email, demo_mode=demo_mode)
+    else:
+        return {"info": "Upgrade to Pro or Platinum to see analytics."}
+
+    charts_dict = {}
+    for key, value in analytics_data.items():
+        charts_dict[key] = value
+    return charts_dict
+
 
 # -------------------------------
 # PLATINUM ANALYTICS
