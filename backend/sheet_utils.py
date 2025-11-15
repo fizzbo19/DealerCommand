@@ -41,7 +41,7 @@ def get_sheet(tab_name=None):
         return None
     try:
         client = gspread.authorize(creds)
-        spreadsheet = client.open_by_url(SHEET_URL)
+        spreadsheet = client.open_by_key(SHEET_ID)  # <-- use SHEET_ID
         if tab_name:
             return spreadsheet.worksheet(tab_name)
         return spreadsheet.sheet1
