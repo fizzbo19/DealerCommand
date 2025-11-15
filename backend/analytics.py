@@ -342,3 +342,118 @@ def platinum_insights(df):
     insights["Best Platform"] = df.groupby("Platform")["Revenue"].sum().idxmax() if "Platform" in df.columns else None
     insights["Posting Frequency"] = df["Date"].dt.date.value_counts().mean() if "Date" in df.columns else 0
     return insights
+
+# backend/analytics.py
+
+
+# -----------------------------
+# FETCH USER ANALYTICS DATA
+# -----------------------------
+def get_user_analytics_data(user_email, user_plan="pro"):
+    """
+    Fetch analytics data for a dealership.
+    Pulls from Google Sheets. Returns:
+        - DataFrame with analytics
+        - use_demo: True if no real data exists (show demo charts)
+    """
+    try:
+        # Fetch inventory data from Google Sheets
+        df = get_sheet_data("Inventory")
+
+        if df.empty:
+            use_demo = True
+            analytics_df = generate_demo_data()
+        else:
+            # Filter by dealership email
+            analytics_df = df[df["Email"].str.lower() == user_email.lower()].copy()
+
+            # Ensure numeric columns
+            for col in ["Revenue", "Price"]:
+                if col in analytics_df.columns:
+                    analytics_df[col] = pd.to_numeric(analytics_df[col], errors="coerce").fillna(0)
+
+            # Ensure Date column is datetime
+            if "Date" in analytics_df.columns:
+                analytics_df["Date"] = pd.to_datetime(analytics_df["Date"], errors="coerce")
+            elif "Timestamp" in analytics_df.columns:
+                analytics_df["Date"] = pd.to_datetime(analytics_df["Timestamp"], errors="coerce")
+            else:
+                analytics_df["Date"] = pd.date_range(end=datetime.today(), periods=len(analytics_df))
+
+            # If still empty after filtering, use demo
+            if analytics_df.empty:
+                use_demo = True
+                analytics_df = generate_demo_data()
+            else:
+                use_demo = False
+
+        return analytics_df, use_demo
+
+    except Exception as e:
+        print(f"⚠️ Error fetching analytics data: {e}")
+        # Fallback to demo data if error occurs
+        return generate_demo_data(), True
+
+
+# -----------------------------
+# PLATINUM AI RECOMMENDATIONS
+# -----------------------------
+def platinum_recommendations(filtered_df):
+    """
+    Return a list of AI-style recommendations based on filtered data.
+    """
+    recs = []
+
+    if filtered_df.empty:
+        recs.append("Add your first listings to start receiving AI recommendations.")
+        return recs
+
+    # --- Revenue Insights ---
+    total_revenue = filtered_df["Revenue"].sum()
+    if total_revenue < 50000:
+        recs.append("Consider increasing listing frequency to boost revenue.")
+    else:
+        recs.append("Great revenue! Keep optimizing your top-performing models.")
+
+    # --- Top Make Advice ---
+    top_make = filtered_df.groupby("Make")["Revenue"].sum().idxmax()
+    recs.append(f"Your top-performing make is {top_make}. Focus marketing on similar models.")
+
+    # --- Pricing Insights ---
+    avg_price = filtered_df["Price"].mean()
+    recs.append(f"Average listing price is £{int(avg_price)}. Check if price adjustments could improve sales.")
+
+    # --- Platform Advice ---
+    if "Platform" in filtered_df.columns:
+        top_platform = filtered_df.groupby("Platform")["Revenue"].sum().idxmax()
+        recs.append(f"Most revenue comes from {top_platform}. Consider prioritizing this platform.")
+
+    # --- Listing Frequency ---
+    avg_posts_per_day = round(filtered_df.groupby(filtered_df["Date"].dt.date).size().mean(), 1)
+    if avg_posts_per_day < 1:
+        recs.append("Increase your posting frequency to attract more buyers.")
+
+    return recs
+
+
+# -----------------------------
+# DEMO DATA GENERATOR
+# -----------------------------
+def generate_demo_data():
+    """
+    Generates demo analytics data for new users or demo mode.
+    """
+    np.random.seed(42)
+    demo_dates = pd.date_range(end=datetime.today(), periods=12, freq="M")
+    demo_df = pd.DataFrame({
+        "Date": demo_dates,
+        "Revenue": np.random.randint(2000, 10000, size=12),
+        "Reach": np.random.randint(5000, 20000, size=12),
+        "Impressions": np.random.randint(10000, 40000, size=12),
+        "Make": np.random.choice(["BMW", "Audi", "Mercedes", "Toyota"], size=12),
+        "Model": np.random.choice(["X5","A3","C-Class","Corolla"], size=12),
+        "Platform": np.random.choice(["Facebook","Instagram","TikTok"], size=12),
+        "Price": np.random.randint(20000, 50000, size=12),
+        "Fuel": np.random.choice(["Petrol", "Diesel", "Hybrid"], size=12)
+    })
+    return demo_df

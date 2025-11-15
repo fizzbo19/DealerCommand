@@ -1,4 +1,5 @@
 # frontend/app.py
+import importlib.util
 import sys, os, io, json
 from datetime import datetime
 import streamlit as st
@@ -133,10 +134,9 @@ with sidebar_tabs[1]:
     st.markdown("### 💳 Upgrade Your Plan")
     st.caption("Select a plan to unlock more listings, analytics, and support.")
     plans = [
-        ("Starter Plan – £29/month", "starter"),
-        ("Pro Plan – £59/month", "pro"),
         ("Premium – £29.99/month", "premium"),
-        ("Pro Plus – £59.99/month", "pro_plus")
+        ("Pro Plan – £59/month", "pro"),
+        ("Platinum – £119.99/month", "platinum")
     ]
     for title, plan_key in plans:
         st.markdown(f"#### {title}")
@@ -259,9 +259,39 @@ Include emojis and SEO-rich phrasing.
 
 
 # --- Analytics Dashboard ---
+
 with main_tabs[1]:
     st.markdown("### 📊 Analytics Dashboard")
-    st.info("Upgrade to view engagement analytics, conversion rates, and SEO performance.")
+
+    # Ensure user_email and plan are set in session state
+    if "user_email" not in st.session_state:
+        st.session_state["user_email"] = user_email
+    if "plan" not in st.session_state:
+        st.session_state["plan"] = status.lower() if status else "free"
+    analytics_path = os.path.join(os.path.dirname(__file__), "pages", "3_Analytics.py")
+    spec = importlib.util.spec_from_file_location("analytics_dashboard", analytics_path)
+    analytics_dashboard = importlib.util.module_from_spec(spec)
+    sys.modules["analytics_dashboard"] = analytics_dashboard
+    spec.loader.exec_module(analytics_dashboard)
+
+    # Note: analytics_dashboard reads st.session_state["user_email"] and ["plan"] internally
+
+
+    # ACTIVE TRIAL → treat as PLATINUM access
+    trial_is_active = status in ["active", "new"] and remaining_days > 0
+
+    if trial_is_active:
+        st.success("🎉 You have full Platinum access for 30 days! All analytics unlocked.")
+        show_analytics_dashboard(user_email, "platinum")
+    else:
+        # After trial → enforce plan rules
+        plan = profile.get("Plan", "free").lower()
+
+        if plan == "free":
+            st.info("Upgrade to unlock full analytics.")
+        else:
+            show_analytics_dashboard(user_email, plan)
+
 
 # --- Inventory Tab ---
 with main_tabs[2]:
