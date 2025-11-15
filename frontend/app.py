@@ -183,6 +183,9 @@ with main_tabs[0]:
                 st.warning("⚠️ You have reached your free trial listing limit. Upgrade to continue.")
             else:
                 try:
+                    # ------------------------
+                    # 1️⃣ OpenAI Listing Generation
+                    # ------------------------
                     client = OpenAI(api_key=api_key)
                     prompt = f"""
 Write a 120–150 word engaging car listing:
@@ -199,22 +202,33 @@ Include emojis and SEO-rich phrasing.
                             ],
                             temperature=0.7
                         )
-                        listing_text = response.choices[0].message.content.strip()
 
-                    # Upload image if exists
+                    # Safe handling of AI response
+                    if response is None or not getattr(response, "choices", None):
+                        st.error("⚠️ OpenAI API returned no response. Please try again.")
+                        listing_text = ""
+                    else:
+                        listing_text = response.choices[0].message.content.strip()
+                        st.success("✅ Listing generated successfully!")
+                        st.markdown(f"**Generated Listing:**\n\n{listing_text}")
+                        st.download_button("⬇ Download Listing", listing_text, file_name="listing.txt")
+
+                    # ------------------------
+                    # 2️⃣ Upload Image (Optional)
+                    # ------------------------
                     image_link = None
                     if car_image:
                         image_link = upload_image_to_drive(
                             car_image,
                             f"{make}_{model}_{datetime.utcnow().isoformat()}.png"
                         )
+                        if not image_link:
+                            st.warning("⚠️ Failed to upload image. Listing will be saved without image.")
 
-                    st.success("✅ Listing generated successfully!")
-                    st.markdown(f"**Generated Listing:**\n\n{listing_text}")
-                    st.download_button("⬇ Download Listing", listing_text, file_name="listing.txt")
-
-                    # Save listing
-                    append_to_google_sheet("Inventory", {
+                    # ------------------------
+                    # 3️⃣ Save Listing to Google Sheets
+                    # ------------------------
+                    inventory_data = {
                         "Email": user_email,
                         "Timestamp": datetime.utcnow().isoformat(),
                         "Make": make,
@@ -228,14 +242,21 @@ Include emojis and SEO-rich phrasing.
                         "Features": features,
                         "Notes": notes,
                         "Listing": listing_text,
-                        "Image_Link": image_link
-                    })
+                        "Image_Link": image_link if image_link else ""
+                    }
 
-                    increment_usage(user_email, 1)
+                    saved = append_to_google_sheet("Inventory", inventory_data)
+                    if saved:
+                        st.success("✅ Listing saved successfully to Google Sheets!")
+                        increment_usage(user_email, 1)
+                    else:
+                        st.error("⚠️ Failed to save listing to Google Sheets.")
+
                 except Exception as e:
-                    st.error(f"⚠️ Error: {e}")
+                    st.error(f"⚠️ Unexpected error: {e}")
     else:
         st.warning("⚠️ Your trial has ended or listing limit reached. Please upgrade to continue.")
+
 
 # --- Analytics Dashboard ---
 with main_tabs[1]:

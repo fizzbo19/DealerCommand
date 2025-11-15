@@ -8,6 +8,7 @@ import stripe
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
 STRIPE_PREMIUM_PRICE_ID = os.environ.get("STRIPE_PREMIUM_PRICE_ID")  # £29.99/month
 STRIPE_PRO_PRICE_ID = os.environ.get("STRIPE_PRO_PRICE_ID")          # £59.99/month
+STRIPE_PLATINUM_PRICE_ID = os.environ.get("STRIPE_PLATINUM_PRICE_ID")  # £119.99/month
 STRIPE_SUCCESS_URL = os.environ.get("STRIPE_SUCCESS_URL", "https://dealercommand.tech/success")
 STRIPE_CANCEL_URL = os.environ.get("STRIPE_CANCEL_URL", "https://dealercommand.tech/cancel")
 
