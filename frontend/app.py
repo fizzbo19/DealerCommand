@@ -5,6 +5,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from openai import OpenAI
+import random
 
 # ---------------------------------------------------------
 # PATH SETUP
@@ -247,25 +248,122 @@ Include emojis and SEO-rich phrasing.
     else:
         st.warning("⚠️ Trial ended or listing limit reached. Upgrade to continue.")
 
+import random  # Add this at the top of your app.py if not already imported
+
 # ----------------
-# ANALYTICS DASHBOARD
+# ANALYTICS DASHBOARD (8 Dynamic Demo Dashboards)
 # ----------------
 with main_tabs[1]:
     st.markdown("### 📊 Analytics Dashboard")
     show_demo_charts = st.checkbox("🎨 Show Demo Charts", value=True)
-    if current_plan=="platinum":
-        dashboard = get_platinum_dashboard(user_email)
-        st.markdown(f"**👤 Email:** {dashboard['Profile']['Email']}")
-        st.markdown(f"**Plan:** {dashboard['Profile']['Plan']}")
-        st.markdown(f"**Inventory Count:** {dashboard['Inventory_Count']}")
-        st.markdown(f"**Remaining Listings:** {dashboard['Remaining_Listings']}")
-        # Top recommendations
-        top_df = pd.DataFrame(dashboard.get("Top_Recommendations", []))
-        if show_demo_charts or top_df.empty:
-            fig_demo = px.bar(x=["Car A","Car B","Car C"], y=[5,3,2], text=[5,3,2], title="Top Recommendations Demo")
-            st.plotly_chart(fig_demo, use_container_width=True)
-        else:
-            st.dataframe(top_df)
+
+    if current_plan == "platinum":
+        st.markdown("### 🔹 Demo Dashboards for Platinum Users")
+
+        for i in range(1, 9):  # 8 demo dashboards
+            st.markdown(f"## Demo Dashboard {i}")
+
+            # ----------------
+            # Top Recommendations
+            # ----------------
+            demo_top_recs = pd.DataFrame([
+                {"Year":"2021","Make":"BMW","Model":"X5 M Sport","Score":random.randint(80,90)},
+                {"Year":"2022","Make":"Audi","Model":"Q7","Score":random.randint(75,85)},
+                {"Year":"2020","Make":"Mercedes","Model":"GLE","Score":random.randint(70,80)}
+            ])
+            fig_top = px.bar(
+                demo_top_recs,
+                x="Model",
+                y="Score",
+                text="Score",
+                color="Make",
+                title=f"Top Recommendations Demo {i}"
+            )
+            st.plotly_chart(fig_top, use_container_width=True)
+
+            # ----------------
+            # Social Media Insights
+            # ----------------
+            demo_social = pd.DataFrame({
+                "Week":["Week 1","Week 2","Week 3","Week 4"],
+                "Instagram Likes":[random.randint(100,150) for _ in range(4)],
+                "Facebook Likes":[random.randint(70,120) for _ in range(4)],
+                "Leads":[random.randint(8,15) for _ in range(4)]
+            })
+            fig_social = px.line(
+                demo_social,
+                x="Week",
+                y=["Instagram Likes","Facebook Likes","Leads"],
+                markers=True,
+                title=f"Social Media Performance Demo {i}"
+            )
+            st.plotly_chart(fig_social, use_container_width=True)
+
+            # ----------------
+            # Inventory Summary
+            # ----------------
+            demo_inventory_summary = pd.DataFrame({
+                "Make":["BMW","Audi","Mercedes","Tesla"],
+                "Count":[random.randint(3,7) for _ in range(4)],
+                "Average Price":[random.randint(45000,60000) for _ in range(4)]
+            })
+            st.markdown("**Inventory Summary**")
+            st.table(demo_inventory_summary)
+
+            # ----------------
+            # AI Video Script Generator Demo
+            # ----------------
+            st.markdown("### 🎬 AI Video Script Generator")
+            sample_listing = demo_top_recs.iloc[0]
+            demo_script = f"""
+Introducing the {sample_listing['Year']} {sample_listing['Make']} {sample_listing['Model']}!
+Luxury and performance combined. ✅ High-quality interiors, sleek design, and powerful engine.
+Perfect for family trips or city driving. 🚗💨
+Contact us now to book a test drive!
+"""
+            st.text_area("🎬 Demo Video Script", demo_script, height=150)
+            st.download_button(
+                "⬇ Download Demo Script",
+                demo_script,
+                file_name=f"{sample_listing['Make']}_{sample_listing['Model']}_demo_script.txt"
+            )
+
+            # ----------------
+            # Competitor Monitoring Demo
+            # ----------------
+            st.markdown("### 🏁 Competitor Monitoring (Demo)")
+            demo_competitors = pd.DataFrame([
+                {"Competitor":"AutoHub","Make":"BMW","Model":"X5","Price":random.randint(47000,50000),"Location":"London"},
+                {"Competitor":"CarMax","Make":"Audi","Model":"Q7","Price":random.randint(46000,49000),"Location":"Manchester"},
+                {"Competitor":"MotorWorld","Make":"Mercedes","Model":"GLE","Price":random.randint(53000,56000),"Location":"Birmingham"}
+            ])
+            st.dataframe(demo_competitors)
+            st.download_button(
+                "⬇ Download Competitor Data",
+                demo_competitors.to_csv(index=False),
+                file_name=f"competitor_demo_data_{i}.csv"
+            )
+
+            # ----------------
+            # Weekly Content Calendar Demo
+            # ----------------
+            st.markdown("### 📅 Weekly Content Calendar (Demo)")
+            demo_calendar = pd.DataFrame({
+                "Day":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
+                "Content":[
+                    random.choice(["Listing Highlight","Social Post","Video Script","Tips & Tricks","Wrap Up"]) for _ in range(7)
+                ],
+                "Platform":[random.choice(["Instagram","Facebook","LinkedIn"]) for _ in range(7)]
+            })
+            st.dataframe(demo_calendar)
+            st.download_button(
+                "⬇ Download Weekly Content Calendar",
+                demo_calendar.to_csv(index=False),
+                file_name=f"weekly_content_calendar_demo_{i}.csv"
+            )
+
+            st.markdown("---")
+
 
 # ----------------
 # INVENTORY TAB
