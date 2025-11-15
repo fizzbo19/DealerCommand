@@ -1,3 +1,4 @@
+
 # backend/sheet_utils.py
 import os
 import json
@@ -8,6 +9,11 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 import io
 from datetime import datetime
+print("🔍 Debug: Starting sheet_utils.py")
+print("🔍 SHEET_ID:", SHEET_ID)
+print("🔍 GOOGLE_CREDENTIALS present:", bool(os.environ.get("GOOGLE_CREDENTIALS") or os.environ.get("GOOGLE_CREDENTIALS_JSON")))
+
+
 
 SHEET_ID = os.environ.get("SHEET_ID")
 
@@ -16,6 +22,8 @@ SHEET_ID = os.environ.get("SHEET_ID")
 # ----------------------
 def get_google_credentials():
     raw = os.environ.get("GOOGLE_CREDENTIALS_JSON") or os.environ.get("GOOGLE_CREDENTIALS")
+    print("🔍 Loading Google credentials...")
+
     if not raw:
         print("⚠️ GOOGLE_CREDENTIALS or GOOGLE_CREDENTIALS_JSON not set")
         return None
@@ -34,8 +42,11 @@ def get_google_credentials():
         return None
 
 
+
 def get_sheet(tab_name=None):
     creds = get_google_credentials()
+    print("🔍 Attempting to open spreadsheet with ID:", SHEET_ID)
+
     if not creds:
         return None
     try:
