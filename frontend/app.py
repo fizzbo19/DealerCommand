@@ -156,18 +156,52 @@ with sidebar_tabs[0]:
         st.error("🚫 Your trial has expired. Upgrade to continue using DealerCommand.")
 
 # Upgrade Plans
-with sidebar_tabs[1]:
-    st.markdown("### 💳 Upgrade Your Plan")
-    plans = [
-        ("Premium – £29.99/month", "premium"),
-        ("Pro Plan – £59/month", "pro"),
-        ("Platinum – £119.99/month", "platinum")
-    ]
-    for title, plan_key in plans:
-        st.markdown(f"#### {title}")
-        checkout_url = create_checkout_session(user_email, plan=plan_key)
-        st.markdown(f"[Upgrade to {title}]({checkout_url})", unsafe_allow_html=True)
-        st.markdown("---")
+
+    # Sidebar: Plans Info
+with st.sidebar.expander("💳 See Our Plans"):
+    st.markdown("### ✨ Premium – Free for 30 Days, then £49.99/mo")
+    st.markdown("""
+- Social Media Analytics Dashboard
+- Instagram/TikTok post performance
+- Basic AI captions (5 per day)
+- Inventory Upload (Google Sheet)
+- Inventory Overview (20 cars max)
+- Weekly Dealer Report (Email)
+- 1 User Seat
+**Best for:** Dealers testing AI but not fully committed.
+""")
+
+    st.markdown("### 🚀 Pro – £99.99/mo")
+    st.markdown("""
+- Everything in Premium, plus:
+- Full Social Analytics + Deep Insights
+- Dealer Performance Score (Daily)
+- Inventory Dashboard (Unlimited Cars)
+- AI Video Script Generator
+- Compare Cars Analytics Module
+- Export to CSV & Google Sheets Sync
+- Custom AI Recommendations (Daily)
+- Competitor Monitoring (Local Market)
+- Auto-Scheduled Weekly Content Calendar
+- 3 User Seats
+**Best for:** Dealers who want reliable automation & sales insights.
+""")
+
+    st.markdown("### 👑 Platinum – £179.99/mo")
+    st.markdown("""
+- Everything in Pro, plus:
+- Custom Charts & Analytics Modules
+- Market Price Intelligence
+- Best Price to List (AI Appraisal Tool)
+- Automated Sales Forecasting
+- Branding Kit
+- White-Label Dealer Portal
+- Priority Support
+- Dedicated Account Setup
+- Unlimited User Seats
+**Best for:** Established dealerships who need end-to-end reporting and forecasting.
+""")
+
 
 # User Settings
 with sidebar_tabs[2]:
@@ -310,31 +344,70 @@ with main_tabs[1]:
 # ----------------
 # Inventory Tab
 # ----------------
+# --- Inventory Tab ---
 with main_tabs[2]:
     st.markdown("### 📈 Your Inventory")
+
     try:
         df_inventory = get_sheet_data("Inventory")
-        user_inventory = df_inventory[df_inventory["Email"].str.lower() == user_email.lower()]
 
-        if not user_inventory.empty:
-            for _, row in user_inventory.iterrows():
-                st.markdown(f"**{row['Year']} {row['Make']} {row['Model']}**")
+        # Handle empty or missing sheet
+        if df_inventory is None or df_inventory.empty:
+            st.info("No inventory has been added yet.")
+            st.stop()
 
-                if row.get("Image_Link"):
-                    st.image(row["Image_Link"], width=300)
+        # Ensure column names are normalised
+        df_inventory.columns = [str(c).strip() for c in df_inventory.columns]
 
-                st.write(row[[
-                    "Mileage","Color","Fuel","Transmission",
-                    "Price","Features","Notes","Listing"
-                ]])
+        # Fix case sensitivity: look for any form of "Email"
+        possible_email_columns = ["Email", "email", "E-mail", "e-mail", "User", "user_email"]
 
-                st.markdown("---")
+        email_col = None
+        for col in df_inventory.columns:
+            if col.strip() in possible_email_columns:
+                email_col = col
+                break
 
-        else:
-            st.info("No listings yet.")
+        if not email_col:
+            st.error("⚠️ Inventory sheet missing an 'Email' column. Please add one.")
+            st.stop()
+
+        # Filter inventory by user email
+        df_inventory[email_col] = df_inventory[email_col].astype(str).str.lower()
+        filtered = df_inventory[df_inventory[email_col] == user_email.lower()]
+
+        if filtered.empty:
+            st.info("You haven't added any listings yet.")
+            st.stop()
+
+        # Display listings
+        for _, row in filtered.iterrows():
+            st.subheader(f"{row.get('Year', '')} {row.get('Make', '')} {row.get('Model', '')}")
+
+            # Show image if exists
+            if row.get("Image_Link"):
+                st.image(row["Image_Link"], width=300)
+
+            # Show car details table
+            details = {
+                "Mileage": row.get("Mileage", "-"),
+                "Color": row.get("Color", "-"),
+                "Fuel": row.get("Fuel", "-"),
+                "Transmission": row.get("Transmission", "-"),
+                "Price": row.get("Price", "-"),
+                "Features": row.get("Features", "-"),
+                "Notes": row.get("Notes", "-"),
+            }
+            st.table(pd.DataFrame(details.items(), columns=["Attribute", "Value"]))
+
+            st.markdown("#### Listing Description")
+            st.write(row.get("Listing", "No description found."))
+
+            st.markdown("---")
 
     except Exception as e:
         st.error(f"⚠️ Could not load inventory: {e}")
+
 
 # ---------------------------------------------------------
 # Footer
