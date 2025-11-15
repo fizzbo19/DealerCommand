@@ -462,7 +462,7 @@ with main_tabs[1]:
             for idx, row in demo_top_recs.iterrows():
                 img_url = random.choice(demo_car_images)
                 col = cols[idx % 3]
-                col.image(img_url, caption=f"{row['Year']} {row['Make']} {row['Model']}", use_column_width=True)
+                col.image(img_url, caption=f"{row['Year']} {row['Make']} {row['Model']}", use_container_width=True)
 
             # ---- Social & Engagement Charts ----
             demo_social = pd.DataFrame(data["social"])
@@ -506,7 +506,7 @@ with main_tabs[1]:
             for idx, row in demo_inventory_summary.iterrows():
                 col = inv_cols[idx % len(inv_cols)]
                 img_url = random.choice(demo_car_images)
-                col.image(img_url, caption=f"{row['Make']} - £{row['Average Price']}", use_column_width=True)
+                col.image(img_url, caption=f"{row['Make']} - £{row['Average Price']}", use_container_width=True)
 
             # ---- AI Video Script Generator ----
             st.markdown("### 🎬 AI Video Script Generator")
