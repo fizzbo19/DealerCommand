@@ -248,10 +248,8 @@ Include emojis and SEO-rich phrasing.
     else:
         st.warning("⚠️ Trial ended or listing limit reached. Upgrade to continue.")
 
-import random  # Add this at the top of your app.py if not already imported
-
 # ----------------
-# ANALYTICS DASHBOARD (8 Dynamic Demo Dashboards)
+# ANALYTICS DASHBOARD (8 Unique Demo Dashboards)
 # ----------------
 with main_tabs[1]:
     st.markdown("### 📊 Analytics Dashboard")
@@ -260,17 +258,22 @@ with main_tabs[1]:
     if current_plan == "platinum":
         st.markdown("### 🔹 Demo Dashboards for Platinum Users")
 
-        for i in range(1, 9):  # 8 demo dashboards
+        # Sample demo images (used for all dashboards)
+        demo_car_images = [
+            "https://source.unsplash.com/400x300/?bmw,car",
+            "https://source.unsplash.com/400x300/?audi,car",
+            "https://source.unsplash.com/400x300/?mercedes,car",
+            "https://source.unsplash.com/400x300/?tesla,car",
+            "https://source.unsplash.com/400x300/?jaguar,car"
+        ]
+
+        for i, data in enumerate(demo_data, start=1):
             st.markdown(f"## Demo Dashboard {i}")
 
             # ----------------
             # Top Recommendations
             # ----------------
-            demo_top_recs = pd.DataFrame([
-                {"Year":"2021","Make":"BMW","Model":"X5 M Sport","Score":random.randint(80,90)},
-                {"Year":"2022","Make":"Audi","Model":"Q7","Score":random.randint(75,85)},
-                {"Year":"2020","Make":"Mercedes","Model":"GLE","Score":random.randint(70,80)}
-            ])
+            demo_top_recs = pd.DataFrame(data["top_recs"])
             fig_top = px.bar(
                 demo_top_recs,
                 x="Model",
@@ -281,34 +284,73 @@ with main_tabs[1]:
             )
             st.plotly_chart(fig_top, use_container_width=True)
 
+            # Sample images for top recommendations
+            st.markdown("**🚗 Sample Car Images**")
+            col1, col2, col3 = st.columns(3)
+            for idx, row in demo_top_recs.iterrows():
+                img_url = random.choice(demo_car_images)
+                col = [col1, col2, col3][idx % 3]
+                col.image(img_url, caption=f"{row['Year']} {row['Make']} {row['Model']}", use_column_width=True)
+
             # ----------------
-            # Social Media Insights
+            # Social Media & Engagement Insights
             # ----------------
+            demo_weeks = ["Week 1", "Week 2", "Week 3", "Week 4"]
             demo_social = pd.DataFrame({
-                "Week":["Week 1","Week 2","Week 3","Week 4"],
-                "Instagram Likes":[random.randint(100,150) for _ in range(4)],
-                "Facebook Likes":[random.randint(70,120) for _ in range(4)],
-                "Leads":[random.randint(8,15) for _ in range(4)]
+                "Week": demo_weeks,
+                "Instagram Likes": [random.randint(100, 200) for _ in demo_weeks],
+                "Facebook Likes": [random.randint(80, 160) for _ in demo_weeks],
+                "Twitter Retweets": [random.randint(20, 50) for _ in demo_weeks],
+                "Website Clicks": [random.randint(50, 120) for _ in demo_weeks],
+                "Leads": [random.randint(5, 20) for _ in demo_weeks]
             })
-            fig_social = px.line(
+
+            # Line chart
+            fig_social_line = px.line(
                 demo_social,
                 x="Week",
-                y=["Instagram Likes","Facebook Likes","Leads"],
+                y=["Instagram Likes", "Facebook Likes", "Twitter Retweets"],
                 markers=True,
-                title=f"Social Media Performance Demo {i}"
+                title=f"📈 Social Engagement Demo {i}",
+                labels={"value": "Engagement", "Week": "Week"}
             )
-            st.plotly_chart(fig_social, use_container_width=True)
+            st.plotly_chart(fig_social_line, use_container_width=True)
+
+            # Bar chart for clicks vs leads
+            fig_clicks = px.bar(
+                demo_social,
+                x="Week",
+                y=["Website Clicks", "Leads"],
+                barmode="group",
+                text_auto=True,
+                title=f"🖱 Website Clicks & Leads Demo {i}",
+                labels={"value": "Count", "Week": "Week"}
+            )
+            st.plotly_chart(fig_clicks, use_container_width=True)
+
+            # Pie chart for last week platform contribution
+            last_week_data = demo_social.iloc[-1]
+            fig_pie = px.pie(
+                names=["Instagram Likes", "Facebook Likes", "Twitter Retweets"],
+                values=[last_week_data["Instagram Likes"], last_week_data["Facebook Likes"], last_week_data["Twitter Retweets"]],
+                title=f"📊 Last Week Platform Engagement Demo {i}"
+            )
+            st.plotly_chart(fig_pie, use_container_width=True)
 
             # ----------------
             # Inventory Summary
             # ----------------
-            demo_inventory_summary = pd.DataFrame({
-                "Make":["BMW","Audi","Mercedes","Tesla"],
-                "Count":[random.randint(3,7) for _ in range(4)],
-                "Average Price":[random.randint(45000,60000) for _ in range(4)]
-            })
+            demo_inventory_summary = pd.DataFrame(data["inventory"])
             st.markdown("**Inventory Summary**")
             st.table(demo_inventory_summary)
+
+            # Inventory Images
+            st.markdown("**🚘 Inventory Images**")
+            inv_cols = st.columns(len(demo_inventory_summary))
+            for idx, row in demo_inventory_summary.iterrows():
+                col = inv_cols[idx % len(inv_cols)]
+                img_url = random.choice(demo_car_images)
+                col.image(img_url, caption=f"{row['Make']} - £{row['Average Price']}", use_column_width=True)
 
             # ----------------
             # AI Video Script Generator Demo
@@ -321,12 +363,53 @@ Luxury and performance combined. ✅ High-quality interiors, sleek design, and p
 Perfect for family trips or city driving. 🚗💨
 Contact us now to book a test drive!
 """
-            st.text_area("🎬 Demo Video Script", demo_script, height=150)
+            st.text_area(f"🎬 Demo Video Script {i}", demo_script, height=150, key=f"demo_script_{i}")
             st.download_button(
-                "⬇ Download Demo Script",
+                f"⬇ Download Demo Script {i}",
                 demo_script,
-                file_name=f"{sample_listing['Make']}_{sample_listing['Model']}_demo_script.txt"
+                file_name=f"{sample_listing['Make']}_{sample_listing['Model']}_demo_script_{i}.txt",
+                key=f"download_demo_script_{i}"
             )
+
+            # ----------------
+            # Competitor Monitoring Demo
+            # ----------------
+            st.markdown("### 🏁 Competitor Monitoring (Demo)")
+            demo_competitors = pd.DataFrame([
+                {"Competitor":"AutoHub","Make":"BMW","Model":"X5","Price":random.randint(47000,50000),"Location":"London"},
+                {"Competitor":"CarMax","Make":"Audi","Model":"Q7","Price":random.randint(46000,49000),"Location":"Manchester"},
+                {"Competitor":"MotorWorld","Make":"Mercedes","Model":"GLE","Price":random.randint(53000,56000),"Location":"Birmingham"}
+            ])
+            st.dataframe(demo_competitors)
+            st.download_button(
+                f"⬇ Download Competitor Data Demo {i}",
+                demo_competitors.to_csv(index=False),
+                file_name=f"competitor_demo_data_{i}.csv",
+                key=f"download_competitor_{i}"
+            )
+
+            # ----------------
+            # Weekly Content Calendar Demo
+            # ----------------
+            st.markdown("### 📅 Weekly Content Calendar (Demo)")
+            demo_calendar = pd.DataFrame({
+                "Day":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
+                "Content":[random.choice(["Listing Highlight","Social Post","Video Script","Tips & Tricks","Wrap Up"]) for _ in range(7)],
+                "Platform":[random.choice(["Instagram","Facebook","LinkedIn"]) for _ in range(7)]
+            })
+            st.dataframe(demo_calendar)
+            st.download_button(
+                f"⬇ Download Weekly Content Calendar Demo {i}",
+                demo_calendar.to_csv(index=False),
+                file_name=f"weekly_content_calendar_demo_{i}.csv",
+                key=f"download_calendar_{i}"
+            )
+
+            st.markdown("---")
+
+
+
+
 
             # ----------------
             # Competitor Monitoring Demo
