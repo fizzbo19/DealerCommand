@@ -282,10 +282,26 @@ with main_tabs[1]:
             for p in range(0, 101, 25):
                 prog.progress(p)
 
-        # helper: get brand-specific Unsplash image (adds random sig to avoid caching)
+        # helper: get brand-specific image (FIXED WITH STATIC URLS for reliability)
         def get_car_image_url(make):
+            """
+            Returns a reliable, publicly-hosted image URL for the given car make, 
+            or a generic car image if the make is not found.
+            """
             safe_make = str(make).split()[0].lower()
-            return f"https://source.unsplash.com/600x400/?{safe_make},car&sig={random.randint(1,999999)}"
+            
+            # Reliable, publicly hosted static images (High probability of working)
+            static_images = {
+                "bmw": "https://images.unsplash.com/photo-1583097893110-6815336d3e89?ixlib=rb-4.0.3&fit=crop&w=600&h=400",
+                "audi": "https://images.unsplash.com/photo-1549420067-1fa649d214a1?ixlib=rb-4.0.3&fit=crop&w=600&h=400",
+                "mercedes": "https://images.unsplash.com/photo-1616781423405-c1284a7536ab?ixlib=rb-4.0.3&fit=crop&w=600&h=400",
+                "tesla": "https://images.unsplash.com/photo-1558235222-acb8fe1b12b5?ixlib=rb-4.0.3&fit=crop&w=600&h=400",
+                "jaguar": "https://images.unsplash.com/photo-1629851722830-580a6b998240?ixlib=rb-4.0.3&fit=crop&w=600&h=400",
+                "porsche": "https://images.unsplash.com/photo-1547788426-38202562479f?ixlib=rb-4.0.3&fit=crop&w=600&h=400",
+                "land": "https://images.unsplash.com/photo-1552519503-f14125b04c8f?ixlib=rb-4.0.3&fit=crop&w=600&h=400", # Land Rover
+                "default": "https://images.unsplash.com/photo-1502877338535-766e14526848?ixlib=rb-4.0.3&fit=crop&w=600&h=400"
+            }
+            return static_images.get(safe_make, static_images["default"])
 
         # ----- Demo Data for 8 Dashboards (same as before) -----
         demo_data = [
@@ -534,12 +550,10 @@ with main_tabs[1]:
             top_makes = set(top_recs_df["Make"])
             top_models = set(top_recs_df["Model"])
             
-            # --- FIX APPLIED: selected_make and selected_model are now defined ---
             if selected_make != "All" and selected_make not in top_makes:
                 continue
             if selected_model != "All" and selected_model not in top_models:
                 continue
-            # --- END FIX ---
 
             st.markdown(f"## Demo Dashboard {i}")
 
