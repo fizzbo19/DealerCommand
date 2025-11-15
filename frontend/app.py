@@ -267,12 +267,184 @@ with main_tabs[1]:
             "https://source.unsplash.com/400x300/?jaguar,car"
         ]
 
+        # ----- Demo Data for 8 Dashboards -----
+        demo_data = [
+            {
+                "top_recs": [
+                    {"Year":"2021","Make":"BMW","Model":"X5 M Sport","Score":88},
+                    {"Year":"2022","Make":"Audi","Model":"Q7","Score":82},
+                    {"Year":"2020","Make":"Mercedes","Model":"GLE","Score":79}
+                ],
+                "social": {
+                    "Instagram Likes":[120,135,140,150],
+                    "Facebook Likes":[100,110,115,120],
+                    "Twitter Retweets":[30,35,32,40],
+                    "Website Clicks":[60,70,65,80],
+                    "Leads":[10,12,14,13]
+                },
+                "inventory": [
+                    {"Make":"BMW","Count":5,"Average Price":54000},
+                    {"Make":"Audi","Count":4,"Average Price":52000},
+                    {"Make":"Mercedes","Count":3,"Average Price":58000},
+                    {"Make":"Tesla","Count":2,"Average Price":60000}
+                ]
+            },
+            # Dashboard 2
+            {
+                "top_recs": [
+                    {"Year":"2022","Make":"Audi","Model":"Q8","Score":87},
+                    {"Year":"2021","Make":"BMW","Model":"X6","Score":84},
+                    {"Year":"2020","Make":"Mercedes","Model":"GLC","Score":76}
+                ],
+                "social": {
+                    "Instagram Likes":[130,140,125,135],
+                    "Facebook Likes":[90,105,100,110],
+                    "Twitter Retweets":[25,30,28,32],
+                    "Website Clicks":[55,65,60,70],
+                    "Leads":[9,11,12,10]
+                },
+                "inventory": [
+                    {"Make":"BMW","Count":3,"Average Price":53000},
+                    {"Make":"Audi","Count":5,"Average Price":54000},
+                    {"Make":"Mercedes","Count":4,"Average Price":57000},
+                    {"Make":"Tesla","Count":3,"Average Price":61000}
+                ]
+            },
+            # Dashboard 3
+            {
+                "top_recs": [
+                    {"Year":"2020","Make":"Mercedes","Model":"GLE Coupe","Score":85},
+                    {"Year":"2021","Make":"BMW","Model":"X3 M","Score":80},
+                    {"Year":"2022","Make":"Audi","Model":"Q5","Score":78}
+                ],
+                "social": {
+                    "Instagram Likes":[115,120,125,130],
+                    "Facebook Likes":[85,95,100,105],
+                    "Twitter Retweets":[20,25,22,28],
+                    "Website Clicks":[50,60,55,65],
+                    "Leads":[8,9,10,11]
+                },
+                "inventory": [
+                    {"Make":"BMW","Count":4,"Average Price":52000},
+                    {"Make":"Audi","Count":3,"Average Price":50000},
+                    {"Make":"Mercedes","Count":5,"Average Price":58000},
+                    {"Make":"Tesla","Count":2,"Average Price":62000}
+                ]
+            },
+            # Dashboard 4
+            {
+                "top_recs": [
+                    {"Year":"2021","Make":"Tesla","Model":"Model X","Score":90},
+                    {"Year":"2022","Make":"BMW","Model":"iX","Score":85},
+                    {"Year":"2021","Make":"Audi","Model":"e-tron","Score":80}
+                ],
+                "social": {
+                    "Instagram Likes":[150,160,155,165],
+                    "Facebook Likes":[120,130,125,135],
+                    "Twitter Retweets":[35,40,38,42],
+                    "Website Clicks":[70,80,75,85],
+                    "Leads":[12,14,13,15]
+                },
+                "inventory": [
+                    {"Make":"BMW","Count":2,"Average Price":65000},
+                    {"Make":"Audi","Count":3,"Average Price":62000},
+                    {"Make":"Mercedes","Count":4,"Average Price":64000},
+                    {"Make":"Tesla","Count":5,"Average Price":70000}
+                ]
+            },
+            # Dashboard 5
+            {
+                "top_recs": [
+                    {"Year":"2021","Make":"Jaguar","Model":"F-Pace","Score":82},
+                    {"Year":"2022","Make":"Land Rover","Model":"Discovery","Score":85},
+                    {"Year":"2020","Make":"BMW","Model":"X4","Score":78}
+                ],
+                "social": {
+                    "Instagram Likes":[110,115,120,125],
+                    "Facebook Likes":[95,100,105,110],
+                    "Twitter Retweets":[18,22,20,25],
+                    "Website Clicks":[50,55,52,60],
+                    "Leads":[7,8,9,10]
+                },
+                "inventory": [
+                    {"Make":"BMW","Count":3,"Average Price":51000},
+                    {"Make":"Jaguar","Count":4,"Average Price":56000},
+                    {"Make":"Land Rover","Count":3,"Average Price":59000},
+                    {"Make":"Tesla","Count":2,"Average Price":68000}
+                ]
+            },
+            # Dashboard 6
+            {
+                "top_recs": [
+                    {"Year":"2022","Make":"Porsche","Model":"Cayenne","Score":88},
+                    {"Year":"2021","Make":"Audi","Model":"Q8","Score":82},
+                    {"Year":"2020","Make":"Mercedes","Model":"GLE","Score":79}
+                ],
+                "social": {
+                    "Instagram Likes":[125,130,140,145],
+                    "Facebook Likes":[105,110,115,120],
+                    "Twitter Retweets":[28,30,32,35],
+                    "Website Clicks":[65,70,68,75],
+                    "Leads":[10,11,13,12]
+                },
+                "inventory": [
+                    {"Make":"Porsche","Count":3,"Average Price":75000},
+                    {"Make":"Audi","Count":5,"Average Price":54000},
+                    {"Make":"Mercedes","Count":4,"Average Price":58000},
+                    {"Make":"Tesla","Count":2,"Average Price":65000}
+                ]
+            },
+            # Dashboard 7
+            {
+                "top_recs": [
+                    {"Year":"2021","Make":"BMW","Model":"M3","Score":86},
+                    {"Year":"2022","Make":"Audi","Model":"RS7","Score":84},
+                    {"Year":"2020","Make":"Mercedes","Model":"C63 AMG","Score":81}
+                ],
+                "social": {
+                    "Instagram Likes":[135,140,145,150],
+                    "Facebook Likes":[120,125,130,135],
+                    "Twitter Retweets":[30,32,34,36],
+                    "Website Clicks":[70,75,72,78],
+                    "Leads":[11,12,13,14]
+                },
+                "inventory": [
+                    {"Make":"BMW","Count":5,"Average Price":60000},
+                    {"Make":"Audi","Count":4,"Average Price":62000},
+                    {"Make":"Mercedes","Count":3,"Average Price":63000},
+                    {"Make":"Tesla","Count":2,"Average Price":67000}
+                ]
+            },
+            # Dashboard 8
+            {
+                "top_recs": [
+                    {"Year":"2022","Make":"Mercedes","Model":"S-Class","Score":92},
+                    {"Year":"2021","Make":"BMW","Model":"7 Series","Score":88},
+                    {"Year":"2022","Make":"Audi","Model":"A8","Score":85}
+                ],
+                "social": {
+                    "Instagram Likes":[160,165,170,175],
+                    "Facebook Likes":[140,145,150,155],
+                    "Twitter Retweets":[40,42,45,48],
+                    "Website Clicks":[80,85,82,90],
+                    "Leads":[14,15,16,17]
+                },
+                "inventory": [
+                    {"Make":"BMW","Count":4,"Average Price":85000},
+                    {"Make":"Audi","Count":3,"Average Price":82000},
+                    {"Make":"Mercedes","Count":5,"Average Price":88000},
+                    {"Make":"Tesla","Count":2,"Average Price":90000}
+                ]
+            }
+        ]
+
+        # ----------------
+        # Loop through each demo dashboard
+        # ----------------
         for i, data in enumerate(demo_data, start=1):
             st.markdown(f"## Demo Dashboard {i}")
 
-            # ----------------
-            # Top Recommendations
-            # ----------------
+            # ---- Top Recommendations ----
             demo_top_recs = pd.DataFrame(data["top_recs"])
             fig_top = px.bar(
                 demo_top_recs,
@@ -286,60 +458,44 @@ with main_tabs[1]:
 
             # Sample images for top recommendations
             st.markdown("**🚗 Sample Car Images**")
-            col1, col2, col3 = st.columns(3)
+            cols = st.columns(3)
             for idx, row in demo_top_recs.iterrows():
                 img_url = random.choice(demo_car_images)
-                col = [col1, col2, col3][idx % 3]
+                col = cols[idx % 3]
                 col.image(img_url, caption=f"{row['Year']} {row['Make']} {row['Model']}", use_column_width=True)
 
-            # ----------------
-            # Social Media & Engagement Insights
-            # ----------------
-            demo_weeks = ["Week 1", "Week 2", "Week 3", "Week 4"]
-            demo_social = pd.DataFrame({
-                "Week": demo_weeks,
-                "Instagram Likes": [random.randint(100, 200) for _ in demo_weeks],
-                "Facebook Likes": [random.randint(80, 160) for _ in demo_weeks],
-                "Twitter Retweets": [random.randint(20, 50) for _ in demo_weeks],
-                "Website Clicks": [random.randint(50, 120) for _ in demo_weeks],
-                "Leads": [random.randint(5, 20) for _ in demo_weeks]
-            })
+            # ---- Social & Engagement Charts ----
+            demo_social = pd.DataFrame(data["social"])
+            demo_social["Week"] = ["Week 1","Week 2","Week 3","Week 4"]
 
-            # Line chart
             fig_social_line = px.line(
                 demo_social,
                 x="Week",
-                y=["Instagram Likes", "Facebook Likes", "Twitter Retweets"],
+                y=["Instagram Likes","Facebook Likes","Twitter Retweets"],
                 markers=True,
-                title=f"📈 Social Engagement Demo {i}",
-                labels={"value": "Engagement", "Week": "Week"}
+                title=f"📈 Social Engagement Demo {i}"
             )
             st.plotly_chart(fig_social_line, use_container_width=True)
 
-            # Bar chart for clicks vs leads
             fig_clicks = px.bar(
                 demo_social,
                 x="Week",
-                y=["Website Clicks", "Leads"],
+                y=["Website Clicks","Leads"],
                 barmode="group",
                 text_auto=True,
-                title=f"🖱 Website Clicks & Leads Demo {i}",
-                labels={"value": "Count", "Week": "Week"}
+                title=f"🖱 Website Clicks & Leads Demo {i}"
             )
             st.plotly_chart(fig_clicks, use_container_width=True)
 
-            # Pie chart for last week platform contribution
-            last_week_data = demo_social.iloc[-1]
+            last_week = demo_social.iloc[-1]
             fig_pie = px.pie(
-                names=["Instagram Likes", "Facebook Likes", "Twitter Retweets"],
-                values=[last_week_data["Instagram Likes"], last_week_data["Facebook Likes"], last_week_data["Twitter Retweets"]],
+                names=["Instagram Likes","Facebook Likes","Twitter Retweets"],
+                values=[last_week["Instagram Likes"], last_week["Facebook Likes"], last_week["Twitter Retweets"]],
                 title=f"📊 Last Week Platform Engagement Demo {i}"
             )
             st.plotly_chart(fig_pie, use_container_width=True)
 
-            # ----------------
-            # Inventory Summary
-            # ----------------
+            # ---- Inventory Summary ----
             demo_inventory_summary = pd.DataFrame(data["inventory"])
             st.markdown("**Inventory Summary**")
             st.table(demo_inventory_summary)
@@ -352,9 +508,7 @@ with main_tabs[1]:
                 img_url = random.choice(demo_car_images)
                 col.image(img_url, caption=f"{row['Make']} - £{row['Average Price']}", use_column_width=True)
 
-            # ----------------
-            # AI Video Script Generator Demo
-            # ----------------
+            # ---- AI Video Script Generator ----
             st.markdown("### 🎬 AI Video Script Generator")
             sample_listing = demo_top_recs.iloc[0]
             demo_script = f"""
@@ -371,9 +525,7 @@ Contact us now to book a test drive!
                 key=f"download_demo_script_{i}"
             )
 
-            # ----------------
-            # Competitor Monitoring Demo
-            # ----------------
+            # ---- Competitor Monitoring ----
             st.markdown("### 🏁 Competitor Monitoring (Demo)")
             demo_competitors = pd.DataFrame([
                 {"Competitor":"AutoHub","Make":"BMW","Model":"X5","Price":random.randint(47000,50000),"Location":"London"},
@@ -382,15 +534,13 @@ Contact us now to book a test drive!
             ])
             st.dataframe(demo_competitors)
             st.download_button(
-                f"⬇ Download Competitor Data Demo {i}",
+                f"⬇ Download Competitor Data {i}",
                 demo_competitors.to_csv(index=False),
                 file_name=f"competitor_demo_data_{i}.csv",
                 key=f"download_competitor_{i}"
             )
 
-            # ----------------
-            # Weekly Content Calendar Demo
-            # ----------------
+            # ---- Weekly Content Calendar ----
             st.markdown("### 📅 Weekly Content Calendar (Demo)")
             demo_calendar = pd.DataFrame({
                 "Day":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
@@ -399,50 +549,10 @@ Contact us now to book a test drive!
             })
             st.dataframe(demo_calendar)
             st.download_button(
-                f"⬇ Download Weekly Content Calendar Demo {i}",
+                f"⬇ Download Weekly Content Calendar {i}",
                 demo_calendar.to_csv(index=False),
                 file_name=f"weekly_content_calendar_demo_{i}.csv",
                 key=f"download_calendar_{i}"
-            )
-
-            st.markdown("---")
-
-
-
-
-
-            # ----------------
-            # Competitor Monitoring Demo
-            # ----------------
-            st.markdown("### 🏁 Competitor Monitoring (Demo)")
-            demo_competitors = pd.DataFrame([
-                {"Competitor":"AutoHub","Make":"BMW","Model":"X5","Price":random.randint(47000,50000),"Location":"London"},
-                {"Competitor":"CarMax","Make":"Audi","Model":"Q7","Price":random.randint(46000,49000),"Location":"Manchester"},
-                {"Competitor":"MotorWorld","Make":"Mercedes","Model":"GLE","Price":random.randint(53000,56000),"Location":"Birmingham"}
-            ])
-            st.dataframe(demo_competitors)
-            st.download_button(
-                "⬇ Download Competitor Data",
-                demo_competitors.to_csv(index=False),
-                file_name=f"competitor_demo_data_{i}.csv"
-            )
-
-            # ----------------
-            # Weekly Content Calendar Demo
-            # ----------------
-            st.markdown("### 📅 Weekly Content Calendar (Demo)")
-            demo_calendar = pd.DataFrame({
-                "Day":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
-                "Content":[
-                    random.choice(["Listing Highlight","Social Post","Video Script","Tips & Tricks","Wrap Up"]) for _ in range(7)
-                ],
-                "Platform":[random.choice(["Instagram","Facebook","LinkedIn"]) for _ in range(7)]
-            })
-            st.dataframe(demo_calendar)
-            st.download_button(
-                "⬇ Download Weekly Content Calendar",
-                demo_calendar.to_csv(index=False),
-                file_name=f"weekly_content_calendar_demo_{i}.csv"
             )
 
             st.markdown("---")
