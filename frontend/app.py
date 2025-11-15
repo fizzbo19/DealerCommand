@@ -260,6 +260,19 @@ with main_tabs[1]:
     st.markdown("### 📊 Analytics Dashboard")
     show_demo_charts = st.checkbox("🎨 Show Demo Charts", value=True, key="show_demo_charts")
 
+    # --- FIX: Define selected_make and selected_model ---
+    # Define potential makes and models from demo data (or a sensible default set)
+    all_makes = ["All", "BMW", "Audi", "Mercedes", "Tesla", "Jaguar", "Land Rover", "Porsche"]
+    all_models = ["All", "X5 M Sport", "Q7", "GLE", "Q8", "X6", "GLC", "GLE Coupe", "X3 M", "Q5", "Model X", "iX", "e-tron", "F-Pace", "Discovery", "X4", "Cayenne", "M3", "RS7", "C63 AMG", "S-Class", "7 Series", "A8"]
+    
+    # Create the filter widgets
+    filter_col1, filter_col2 = st.columns(2)
+    with filter_col1:
+        selected_make = st.selectbox("Filter by Make", all_makes)
+    with filter_col2:
+        selected_model = st.selectbox("Filter by Model", all_models)
+    # --- END FIX ---
+    
     if current_plan == "platinum":
         st.markdown("### 🔹 Demo Dashboards for Platinum Users")
 
@@ -276,7 +289,7 @@ with main_tabs[1]:
 
         # ----- Demo Data for 8 Dashboards (same as before) -----
         demo_data = [
-            # (Same demo_data 1..8 as you had previously) - shortened here for clarity; keep full objects in your code
+            # (Same demo_data 1..8 as you had previously) - kept full objects for function
             {
                 "top_recs": [
                     {"Year":"2021","Make":"BMW","Model":"X5 M Sport","Score":88},
@@ -517,12 +530,16 @@ with main_tabs[1]:
         # ----------------
         for i, data in enumerate(demo_data, start=1):
             # apply make/model filters: skip if not matching
-            top_makes = {r["Make"] for r in data["top_recs"]}
-            top_models = {r["Model"] for r in data["top_recs"]}
+            top_recs_df = pd.DataFrame(data["top_recs"])
+            top_makes = set(top_recs_df["Make"])
+            top_models = set(top_recs_df["Model"])
+            
+            # --- FIX APPLIED: selected_make and selected_model are now defined ---
             if selected_make != "All" and selected_make not in top_makes:
                 continue
             if selected_model != "All" and selected_model not in top_models:
                 continue
+            # --- END FIX ---
 
             st.markdown(f"## Demo Dashboard {i}")
 
