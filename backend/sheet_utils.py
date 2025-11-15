@@ -248,4 +248,72 @@ def get_inventory_for_user(email):
     df["Email_lower"] = df["Email"].astype(str).str.lower()
     return df[df["Email_lower"] == email.lower()]
 
+# ============================================================
+# ADDITIONAL FUNCTIONS USED BY ANALYTICS MODULE
+# ============================================================
+
+import pandas as pd
+
+def get_listing_history_df(email):
+    """
+    Returns a cleaned pandas DataFrame of all listings created by this user.
+    Sheet Name: Inventory
+    """
+    try:
+        df = get_sheet_data("Inventory")
+
+        if df.empty:
+            return pd.DataFrame()
+
+        # Standardize casing
+        df["Email"] = df["Email"].astype(str).str.lower()
+        email = email.lower()
+
+        user_df = df[df["Email"] == email].copy()
+        if user_df.empty:
+            return pd.DataFrame()
+
+        # Parse timestamp if exists
+        if "Timestamp" in user_df.columns:
+            user_df["Timestamp"] = pd.to_datetime(user_df["Timestamp"], errors="coerce")
+
+        return user_df
+
+    except Exception as e:
+        print(f"❌ Error in get_listing_history_df: {e}")
+        return pd.DataFrame()
+
+
+def get_social_media_data(email):
+    """
+    Placeholder future function.
+    Returns engagement data for a user's social posts (if added later).
+    Currently returns an empty DataFrame.
+    """
+    try:
+        return pd.DataFrame({
+            "platform": ["TikTok", "Instagram", "YouTube"],
+            "views": [1200, 900, 500],
+            "likes": [87, 65, 41],
+            "clicks": [12, 8, 3]
+        })
+    except Exception as e:
+        print(f"❌ Error in get_social_media_data: {e}")
+        return pd.DataFrame()
+
+
+def filter_social_media(df, platform=None):
+    """
+    Optional filter wrapper.
+    """
+    try:
+        if df.empty:
+            return df
+        if platform:
+            return df[df["platform"].str.lower() == platform.lower()]
+        return df
+    except Exception as e:
+        print(f"❌ Error in filter_social_media: {e}")
+        return df
+
 
