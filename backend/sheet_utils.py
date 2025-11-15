@@ -9,8 +9,7 @@ from googleapiclient.http import MediaIoBaseUpload
 import io
 from datetime import datetime
 
-SHEET_ID = os.environ.get("SHEET_ID") or "https://docs.google.com/spreadsheets/d/1XkZJkCzWzQVZQuN9dPWnPHfBz4DMFEwZYKwzBGsMKV0/edit"
-
+SHEET_ID = os.environ.get("SHEET_ID")
 
 # ----------------------
 # Google Sheet Connection
