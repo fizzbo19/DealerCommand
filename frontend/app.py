@@ -6,6 +6,8 @@ import pandas as pd
 import plotly.express as px
 from openai import OpenAI
 import random
+import io
+import zipfile
 
 # ---------------------------------------------------------
 # PATH SETUP
@@ -249,26 +251,32 @@ Include emojis and SEO-rich phrasing.
         st.warning("⚠️ Trial ended or listing limit reached. Upgrade to continue.")
 
 # ----------------
-# ANALYTICS DASHBOARD (8 Unique Demo Dashboards)
+# ANALYTICS DASHBOARD (8 Unique Demo Dashboards + Extras)
 # ----------------
+import io
+import zipfile
+
 with main_tabs[1]:
     st.markdown("### 📊 Analytics Dashboard")
-    show_demo_charts = st.checkbox("🎨 Show Demo Charts", value=True)
+    show_demo_charts = st.checkbox("🎨 Show Demo Charts", value=True, key="show_demo_charts")
 
     if current_plan == "platinum":
         st.markdown("### 🔹 Demo Dashboards for Platinum Users")
 
-        # Sample demo images (used for all dashboards)
-        demo_car_images = [
-            "https://source.unsplash.com/400x300/?bmw,car",
-            "https://source.unsplash.com/400x300/?audi,car",
-            "https://source.unsplash.com/400x300/?mercedes,car",
-            "https://source.unsplash.com/400x300/?tesla,car",
-            "https://source.unsplash.com/400x300/?jaguar,car"
-        ]
+        # Loading animation and progress bar
+        with st.spinner("Loading demo dashboards..."):
+            prog = st.progress(0)
+            for p in range(0, 101, 25):
+                prog.progress(p)
 
-        # ----- Demo Data for 8 Dashboards -----
+        # helper: get brand-specific Unsplash image (adds random sig to avoid caching)
+        def get_car_image_url(make):
+            safe_make = str(make).split()[0].lower()
+            return f"https://source.unsplash.com/600x400/?{safe_make},car&sig={random.randint(1,999999)}"
+
+        # ----- Demo Data for 8 Dashboards (same as before) -----
         demo_data = [
+            # (Same demo_data 1..8 as you had previously) - shortened here for clarity; keep full objects in your code
             {
                 "top_recs": [
                     {"Year":"2021","Make":"BMW","Model":"X5 M Sport","Score":88},
@@ -289,7 +297,6 @@ with main_tabs[1]:
                     {"Make":"Tesla","Count":2,"Average Price":60000}
                 ]
             },
-            # Dashboard 2
             {
                 "top_recs": [
                     {"Year":"2022","Make":"Audi","Model":"Q8","Score":87},
@@ -310,7 +317,6 @@ with main_tabs[1]:
                     {"Make":"Tesla","Count":3,"Average Price":61000}
                 ]
             },
-            # Dashboard 3
             {
                 "top_recs": [
                     {"Year":"2020","Make":"Mercedes","Model":"GLE Coupe","Score":85},
@@ -331,7 +337,6 @@ with main_tabs[1]:
                     {"Make":"Tesla","Count":2,"Average Price":62000}
                 ]
             },
-            # Dashboard 4
             {
                 "top_recs": [
                     {"Year":"2021","Make":"Tesla","Model":"Model X","Score":90},
@@ -352,7 +357,6 @@ with main_tabs[1]:
                     {"Make":"Tesla","Count":5,"Average Price":70000}
                 ]
             },
-            # Dashboard 5
             {
                 "top_recs": [
                     {"Year":"2021","Make":"Jaguar","Model":"F-Pace","Score":82},
@@ -373,7 +377,6 @@ with main_tabs[1]:
                     {"Make":"Tesla","Count":2,"Average Price":68000}
                 ]
             },
-            # Dashboard 6
             {
                 "top_recs": [
                     {"Year":"2022","Make":"Porsche","Model":"Cayenne","Score":88},
@@ -394,7 +397,6 @@ with main_tabs[1]:
                     {"Make":"Tesla","Count":2,"Average Price":65000}
                 ]
             },
-            # Dashboard 7
             {
                 "top_recs": [
                     {"Year":"2021","Make":"BMW","Model":"M3","Score":86},
@@ -415,7 +417,6 @@ with main_tabs[1]:
                     {"Make":"Tesla","Count":2,"Average Price":67000}
                 ]
             },
-            # Dashboard 8
             {
                 "top_recs": [
                     {"Year":"2022","Make":"Mercedes","Model":"S-Class","Score":92},
@@ -438,10 +439,91 @@ with main_tabs[1]:
             }
         ]
 
+      # -------- Dealer custom dashboard from uploaded CSV (optional) --------
+        st.markdown("### 🔁 Upload dealer inventory to preview a custom dashboard")
+        dealer_csv = st.file_uploader(
+            "Upload your inventory CSV (optional) — will generate a quick custom dashboard",
+            type=["csv"],
+            key="dealer_inventory_upload"
+        )
+
+        if dealer_csv is not None:
+            try:
+                dealer_df = pd.read_csv(dealer_csv)
+                st.success("✅ Dealer inventory loaded. Generating custom dashboard...")
+
+                # Basic Dealer Summary
+                st.markdown("#### Dealer Inventory Summary")
+                st.table(dealer_df.head(10))
+
+                # Simple dealer charts
+                if "Make" in dealer_df.columns and "Price" in dealer_df.columns:
+                    dealer_df["Price_numeric"] = pd.to_numeric(
+                        dealer_df["Price"].replace('£', '', regex=True).replace(',', '', regex=True),
+                        errors='coerce'
+                    )
+                    fig_dealer_price = px.histogram(
+                        dealer_df,
+                        x="Price_numeric",
+                        nbins=20,
+                        title="Dealer Listing Price Distribution"
+                    )
+                    st.plotly_chart(fig_dealer_price, use_container_width=True)
+
+                if "Timestamp" in dealer_df.columns:
+                    dealer_df["Timestamp"] = pd.to_datetime(dealer_df["Timestamp"], errors="coerce")
+                    dealer_df["Date"] = dealer_df["Timestamp"].dt.date
+                    trends = dealer_df.groupby("Date").size().reset_index(name="Listings")
+
+                    fig_trends = px.line(
+                        trends,
+                        x="Date",
+                        y="Listings",
+                        title="Dealer Listing Activity Over Time"
+                    )
+                    st.plotly_chart(fig_trends, use_container_width=True)
+
+            except Exception as e:
+                st.error(f"⚠️ Error loading dealer CSV: {e}")
+
+        # -------- Export All Dashboards (zip CSVs) --------
+        def create_dashboards_zip(demo_data_list):
+            mem_zip = io.BytesIO()
+            with zipfile.ZipFile(mem_zip, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+                for idx, d in enumerate(demo_data_list, start=1):
+                    # top recs
+                    df_top = pd.DataFrame(d["top_recs"])
+                    zf.writestr(f"dashboard_{idx}_top_recommendations.csv", df_top.to_csv(index=False))
+                    # social
+                    df_social = pd.DataFrame(d["social"])
+                    zf.writestr(f"dashboard_{idx}_social.csv", df_social.to_csv(index=False))
+                    # inventory
+                    df_inv = pd.DataFrame(d["inventory"])
+                    zf.writestr(f"dashboard_{idx}_inventory.csv", df_inv.to_csv(index=False))
+            mem_zip.seek(0)
+            return mem_zip
+
+        zip_bytes_io = create_dashboards_zip(demo_data)
+        st.download_button(
+            "📦 Export All Demo Dashboards (ZIP)",
+            data=zip_bytes_io,
+            file_name="dealercommand_demo_dashboards.zip",
+            mime="application/zip",
+            key="export_all_dashboards"
+        )
+
         # ----------------
-        # Loop through each demo dashboard
+        # Loop through each demo dashboard (apply filters)
         # ----------------
         for i, data in enumerate(demo_data, start=1):
+            # apply make/model filters: skip if not matching
+            top_makes = {r["Make"] for r in data["top_recs"]}
+            top_models = {r["Model"] for r in data["top_recs"]}
+            if selected_make != "All" and selected_make not in top_makes:
+                continue
+            if selected_model != "All" and selected_model not in top_models:
+                continue
+
             st.markdown(f"## Demo Dashboard {i}")
 
             # ---- Top Recommendations ----
@@ -456,15 +538,15 @@ with main_tabs[1]:
             )
             st.plotly_chart(fig_top, use_container_width=True)
 
-            # Sample images for top recommendations
+            # Top Recommendation Images (3 columns; dynamic)
             st.markdown("**🚗 Sample Car Images**")
             cols = st.columns(3)
             for idx, row in demo_top_recs.iterrows():
-                img_url = random.choice(demo_car_images)
+                img_url = get_car_image_url(row["Make"])
                 col = cols[idx % 3]
                 col.image(img_url, caption=f"{row['Year']} {row['Make']} {row['Model']}", use_container_width=True)
 
-            # ---- Social & Engagement Charts ----
+            # ---- Social Charts ----
             demo_social = pd.DataFrame(data["social"])
             demo_social["Week"] = ["Week 1","Week 2","Week 3","Week 4"]
 
@@ -490,7 +572,11 @@ with main_tabs[1]:
             last_week = demo_social.iloc[-1]
             fig_pie = px.pie(
                 names=["Instagram Likes","Facebook Likes","Twitter Retweets"],
-                values=[last_week["Instagram Likes"], last_week["Facebook Likes"], last_week["Twitter Retweets"]],
+                values=[
+                    last_week["Instagram Likes"],
+                    last_week["Facebook Likes"],
+                    last_week["Twitter Retweets"]
+                ],
                 title=f"📊 Last Week Platform Engagement Demo {i}"
             )
             st.plotly_chart(fig_pie, use_container_width=True)
@@ -500,23 +586,27 @@ with main_tabs[1]:
             st.markdown("**Inventory Summary**")
             st.table(demo_inventory_summary)
 
-            # Inventory Images
+            # Inventory Images (dynamic columns)
             st.markdown("**🚘 Inventory Images**")
             inv_cols = st.columns(len(demo_inventory_summary))
             for idx, row in demo_inventory_summary.iterrows():
+                img_url = get_car_image_url(row["Make"])
                 col = inv_cols[idx % len(inv_cols)]
-                img_url = random.choice(demo_car_images)
-                col.image(img_url, caption=f"{row['Make']} - £{row['Average Price']}", use_container_width=True)
+                col.image(
+                    img_url,
+                    caption=f"{row['Make']} - £{row['Average Price']:,}",
+                    use_container_width=True
+                )
 
-            # ---- AI Video Script Generator ----
+            # ---- AI Script Generator ----
             st.markdown("### 🎬 AI Video Script Generator")
             sample_listing = demo_top_recs.iloc[0]
-            demo_script = f"""
-Introducing the {sample_listing['Year']} {sample_listing['Make']} {sample_listing['Model']}!
-Luxury and performance combined. ✅ High-quality interiors, sleek design, and powerful engine.
-Perfect for family trips or city driving. 🚗💨
-Contact us now to book a test drive!
-"""
+            demo_script = (
+                f"Introducing the {sample_listing['Year']} {sample_listing['Make']} {sample_listing['Model']}!\n"
+                "Luxury and performance combined. ✅ High-quality interiors, sleek design, and powerful engine.\n"
+                "Perfect for family trips or city driving. 🚗💨\n"
+                "Contact us now to book a test drive!"
+            )
             st.text_area(f"🎬 Demo Video Script {i}", demo_script, height=150, key=f"demo_script_{i}")
             st.download_button(
                 f"⬇ Download Demo Script {i}",
@@ -556,6 +646,8 @@ Contact us now to book a test drive!
             )
 
             st.markdown("---")
+
+
 
 
 # ----------------
