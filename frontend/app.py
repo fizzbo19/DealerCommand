@@ -4,20 +4,26 @@ from datetime import datetime
 import streamlit as st
 import pandas as pd
 from openai import OpenAI
-import importlib.util
 
-# ----------------------
-# Local imports
-# ----------------------
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# ---------------------------------------------------------
+# FIXED / CLEANED PYTHON PATH SETUP
+# ---------------------------------------------------------
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+BACKEND_DIR = os.path.join(BASE_DIR, "backend")
+sys.path.append(BASE_DIR)
+sys.path.append(BACKEND_DIR)
+
+# ---------------------------------------------------------
+# Local Imports (SAFE)
+# ---------------------------------------------------------
 from backend.trial_manager import get_dealership_status, check_listing_limit, increment_usage
 from backend.sheet_utils import append_to_google_sheet, get_sheet_data
 from backend.stripe_utils import create_checkout_session
-from backend.analytics_dashboard import show_analytics_dashboard  # <- cleaned import
+from backend.show_analytics_dashboard import show_analytics_dashboard  # ✅ This now works
 
-# ----------------------
-# Google Drive upload (graceful)
-# ----------------------
+# ---------------------------------------------------------
+# Google Drive Upload (graceful fail)
+# ---------------------------------------------------------
 try:
     from google.oauth2.service_account import Credentials
     from googleapiclient.discovery import build
@@ -37,28 +43,44 @@ def upload_image_to_drive(file_obj, filename, folder_id=None):
         if not raw:
             st.warning("⚠️ GOOGLE_CREDENTIALS not set in environment.")
             return None
+
         info = json.loads(raw)
         creds = Credentials.from_service_account_info(info, scopes=["https://www.googleapis.com/auth/drive"])
         service = build('drive', 'v3', credentials=creds)
+
         media = MediaIoBaseUpload(io.BytesIO(file_obj.read()), mimetype="image/png")
         file_metadata = {"name": filename}
         if folder_id:
             file_metadata["parents"] = [folder_id]
-        uploaded = service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+
+        uploaded = service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields="id"
+        ).execute()
+
         file_id = uploaded.get("id")
-        service.permissions().create(fileId=file_id, body={"role": "reader", "type": "anyone"}).execute()
+        service.permissions().create(
+            fileId=file_id,
+            body={"role": "reader", "type": "anyone"}
+        ).execute()
+
         return f"https://drive.google.com/uc?id={file_id}"
+
     except Exception as e:
         print(f"⚠️ Failed to upload image: {e}")
         return None
 
 
-# ----------------------
-# PAGE CONFIG & LOGO
-# ----------------------
+# ---------------------------------------------------------
+# PAGE CONFIG
+# ---------------------------------------------------------
 st.set_page_config(page_title="DealerCommand AI | Smart Listings", layout="wide", page_icon="🚗")
+
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
 LOGO_FILE = os.path.join(ASSETS_DIR, "dealercommand_logov1.png")
+
+# Sidebar logo
 if os.path.exists(LOGO_FILE):
     st.sidebar.image(LOGO_FILE, width=160, caption="DealerCommand AI")
 else:
@@ -67,25 +89,25 @@ else:
 st.markdown('<h2 style="text-align:center;">🚗 DealerCommand AI</h2>', unsafe_allow_html=True)
 st.markdown('<div class="hero-sub">Create high-converting, SEO-optimised car listings in seconds with AI.</div>', unsafe_allow_html=True)
 
-# ----------------------
-# API KEY CHECK
-# ----------------------
+# ---------------------------------------------------------
+# API Key Check
+# ---------------------------------------------------------
 api_key = os.environ.get("OPENAI_API_KEY")
 if not api_key:
     st.error("⚠️ Missing OpenAI API key. Set `OPENAI_API_KEY` in environment.")
     st.stop()
 
-# ----------------------
-# DEALER LOGIN / EMAIL INPUT
-# ----------------------
+# ---------------------------------------------------------
+# Dealership Email Login
+# ---------------------------------------------------------
 user_email = st.text_input("📧 Dealership email", placeholder="e.g. sales@autohub.co.uk")
 if not user_email:
     st.info("👋 Enter your dealership email above to start your 30-day free trial.")
     st.stop()
 
-# ----------------------
-# FETCH PROFILE & TRIAL STATUS
-# ----------------------
+# ---------------------------------------------------------
+# Fetch Profile
+# ---------------------------------------------------------
 profile = get_dealership_status(user_email)
 status = profile["Trial_Status"]
 expiry_date = profile["Trial_Expiry"]
@@ -94,9 +116,9 @@ remaining_listings = profile["Remaining_Listings"]
 is_active = status in ["active", "new"]
 remaining_days = max((expiry_date - datetime.utcnow()).days, 0) if expiry_date else 0
 
-# ----------------------
-# FIRST-TIME DEALERSHIP INFO
-# ----------------------
+# ---------------------------------------------------------
+# First-time Dealer Info
+# ---------------------------------------------------------
 if status == "new":
     st.info("👋 Welcome! Please provide your dealership info to start your trial.")
     with st.form("dealer_info_form"):
@@ -113,17 +135,18 @@ if status == "new":
             })
             st.success("✅ Dealership info saved!")
 
-# ----------------------
-# SIDEBAR TABS
-# ----------------------
+# ---------------------------------------------------------
+# Sidebar Tabs
+# ---------------------------------------------------------
 sidebar_tabs = st.sidebar.tabs(["🎯 Trial Overview", "💳 Upgrade Plans", "⚙️ User Settings"])
 
-# --- Trial Overview ---
+# Trial Overview
 with sidebar_tabs[0]:
     st.markdown("### 🎯 Your DealerCommand Trial")
     st.markdown(f"**👤 Email:** `{user_email}`")
     st.markdown(f"**📊 Listings Used:** `{usage_count}` / 15")
     st.progress(int(min((usage_count / 15) * 100, 100)))
+
     if is_active:
         st.markdown(f"**🟢 Status:** Active Trial")
         st.markdown(f"**⏳ Days Remaining:** `{remaining_days}` days")
@@ -132,10 +155,9 @@ with sidebar_tabs[0]:
     else:
         st.error("🚫 Your trial has expired. Upgrade to continue using DealerCommand.")
 
-# --- Upgrade Plans ---
+# Upgrade Plans
 with sidebar_tabs[1]:
     st.markdown("### 💳 Upgrade Your Plan")
-    st.caption("Select a plan to unlock more listings, analytics, and support.")
     plans = [
         ("Premium – £29.99/month", "premium"),
         ("Pro Plan – £59/month", "pro"),
@@ -147,7 +169,7 @@ with sidebar_tabs[1]:
         st.markdown(f"[Upgrade to {title}]({checkout_url})", unsafe_allow_html=True)
         st.markdown("---")
 
-# --- User Settings ---
+# User Settings
 with sidebar_tabs[2]:
     st.markdown("### ⚙️ Account Settings")
     st.markdown(f"**Current Status:** `{status}`")
@@ -155,17 +177,21 @@ with sidebar_tabs[2]:
     st.markdown(f"**Total Listings Used:** `{usage_count}`")
     st.markdown(f"**Remaining Listings:** `{remaining_listings}`")
 
-# ----------------------
-# MAIN TABS
-# ----------------------
+# ---------------------------------------------------------
+# Main Tabs
+# ---------------------------------------------------------
 main_tabs = st.tabs(["🧾 Generate Listing", "📊 Analytics Dashboard", "📈 Inventory"])
 
-# --- Generate Listing ---
+# ----------------
+# Generate Listing
+# ----------------
 with main_tabs[0]:
     if is_active and remaining_listings > 0:
         st.markdown("### 🧾 Generate a New Listing")
+
         with st.form("listing_form"):
             col1, col2 = st.columns(2)
+
             with col1:
                 make = st.text_input("Car Make", "BMW")
                 model = st.text_input("Model", "X5 M Sport")
@@ -173,12 +199,14 @@ with main_tabs[0]:
                 mileage = st.text_input("Mileage", "28,000 miles")
                 color = st.text_input("Color", "Black")
                 car_image = st.file_uploader("Upload Car Image (optional)", type=["png","jpg","jpeg"])
+
             with col2:
                 fuel = st.selectbox("Fuel Type", ["Petrol", "Diesel", "Hybrid", "Electric"])
                 transmission = st.selectbox("Transmission", ["Automatic", "Manual"])
                 price = st.text_input("Price", "£45,995")
                 features = st.text_area("Key Features", "Panoramic roof, heated seats, M Sport package")
                 notes = st.text_area("Dealer Notes (optional)", "Full service history, finance available")
+
             submitted = st.form_submit_button("✨ Generate Listing")
 
         if submitted:
@@ -186,7 +214,6 @@ with main_tabs[0]:
                 st.warning("⚠️ You have reached your free trial listing limit. Upgrade to continue.")
             else:
                 try:
-                    # OpenAI Listing Generation
                     client = OpenAI(api_key=api_key)
                     prompt = f"""
 Write a 120–150 word engaging car listing:
@@ -194,6 +221,7 @@ Write a 120–150 word engaging car listing:
 Features: {features}. Dealer Notes: {notes}.
 Include emojis and SEO-rich phrasing.
 """
+
                     with st.spinner("🤖 Generating your listing..."):
                         response = client.chat.completions.create(
                             model="gpt-4o-mini",
@@ -211,7 +239,6 @@ Include emojis and SEO-rich phrasing.
                         st.markdown(f"**Generated Listing:**\n\n{listing_text}")
                         st.download_button("⬇ Download Listing", listing_text, file_name="listing.txt")
 
-                    # Upload image
                     image_link = None
                     if car_image:
                         image_link = upload_image_to_drive(
@@ -221,7 +248,6 @@ Include emojis and SEO-rich phrasing.
                         if not image_link:
                             st.warning("⚠️ Failed to upload image. Listing will be saved without image.")
 
-                    # Save listing to Google Sheets
                     inventory_data = {
                         "Email": user_email,
                         "Timestamp": datetime.utcnow().isoformat(),
@@ -248,50 +274,71 @@ Include emojis and SEO-rich phrasing.
 
                 except Exception as e:
                     st.error(f"⚠️ Unexpected error: {e}")
+
     else:
         st.warning("⚠️ Your trial has ended or listing limit reached. Please upgrade to continue.")
 
-# --- Analytics Dashboard ---
+# ----------------
+# Analytics Dashboard
+# ----------------
+# replace existing analytics tab block with this
+from backend.plan_utils import has_feature
+
 with main_tabs[1]:
     st.markdown("### 📊 Analytics Dashboard")
-    if "user_email" not in st.session_state:
-        st.session_state["user_email"] = user_email
-    if "plan" not in st.session_state:
-        st.session_state["plan"] = status.lower() if status else "free"
 
-    trial_is_active = status in ["active", "new"] and remaining_days > 0
+    # ensure session values
+    st.session_state["user_email"] = st.session_state.get("user_email", user_email)
+    st.session_state["plan"] = st.session_state.get("plan", profile.get("Plan", "free").lower())
 
+    trial_is_active = status in ["active","new"] and remaining_days > 0
+
+    # If trial active, give platinum
     if trial_is_active:
         st.success("🎉 You have full Platinum access for 30 days! All analytics unlocked.")
         show_analytics_dashboard(user_email, "platinum")
     else:
         plan = profile.get("Plan", "free").lower()
-        if plan == "free":
-            st.info("Upgrade to unlock full analytics.")
-        else:
+        if has_feature(plan, "analytics.platinum"):
             show_analytics_dashboard(user_email, plan)
+        elif has_feature(plan, "analytics.pro"):
+            show_analytics_dashboard(user_email, "pro")
+        else:
+            st.info("Upgrade to Pro or Platinum to view analytics. Start a 30-day trial to preview Platinum features.")
 
-# --- Inventory Tab ---
+
+# ----------------
+# Inventory Tab
+# ----------------
 with main_tabs[2]:
     st.markdown("### 📈 Your Inventory")
     try:
         df_inventory = get_sheet_data("Inventory")
         user_inventory = df_inventory[df_inventory["Email"].str.lower() == user_email.lower()]
+
         if not user_inventory.empty:
             for _, row in user_inventory.iterrows():
                 st.markdown(f"**{row['Year']} {row['Make']} {row['Model']}**")
+
                 if row.get("Image_Link"):
                     st.image(row["Image_Link"], width=300)
-                st.write(row[["Mileage","Color","Fuel","Transmission","Price","Features","Notes","Listing"]])
+
+                st.write(row[[
+                    "Mileage","Color","Fuel","Transmission",
+                    "Price","Features","Notes","Listing"
+                ]])
+
                 st.markdown("---")
+
         else:
             st.info("No listings yet.")
+
     except Exception as e:
         st.error(f"⚠️ Could not load inventory: {e}")
 
-# ----------------------
-# FOOTER
-# ----------------------
+# ---------------------------------------------------------
+# Footer
+# ---------------------------------------------------------
 st.markdown(
     '<div class="footer">© 2025 DealerCommand AI — Powered by FizMay Group</div>',
     unsafe_allow_html=True
