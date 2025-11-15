@@ -9,24 +9,17 @@ from googleapiclient.http import MediaIoBaseUpload
 import io
 from datetime import datetime
 
-# ----------------------
-# Google Sheet URL
-# ----------------------
 SHEET_URL = os.environ.get("SHEET_URL") or "https://docs.google.com/spreadsheets/d/12UDiRnjQXwxcHFjR3SWdz8lB45-OTGHBzm3YVcExnsQ/edit"
 
+
 # ----------------------
-# Connect to Google Sheet
+# Google Sheet Connection
 # ----------------------
-def get_sheet(tab_name=None):
-    """
-    Returns the sheet object (optionally specify a tab name).
-    Works with GOOGLE_CREDENTIALS or GOOGLE_CREDENTIALS_JSON.
-    """
+def get_google_credentials():
     raw = os.environ.get("GOOGLE_CREDENTIALS_JSON") or os.environ.get("GOOGLE_CREDENTIALS")
     if not raw:
         print("⚠️ GOOGLE_CREDENTIALS or GOOGLE_CREDENTIALS_JSON not set")
         return None
-
     try:
         info = json.loads(raw)
         creds = Credentials.from_service_account_info(
@@ -36,6 +29,17 @@ def get_sheet(tab_name=None):
                 "https://www.googleapis.com/auth/drive"
             ]
         )
+        return creds
+    except Exception as e:
+        print(f"⚠️ Failed to load Google credentials: {e}")
+        return None
+
+
+def get_sheet(tab_name=None):
+    creds = get_google_credentials()
+    if not creds:
+        return None
+    try:
         client = gspread.authorize(creds)
         spreadsheet = client.open_by_url(SHEET_URL)
         if tab_name:
@@ -45,14 +49,11 @@ def get_sheet(tab_name=None):
         print(f"⚠️ Could not connect to Google Sheet: {e}")
         return None
 
+
 # ----------------------
 # Ensure Tab Exists
 # ----------------------
 def ensure_tab(tab_name, columns=None):
-    """
-    Ensures a worksheet exists. Creates it with columns if missing.
-    Returns the worksheet object.
-    """
     sheet = get_sheet()
     if not sheet:
         return None
@@ -66,17 +67,19 @@ def ensure_tab(tab_name, columns=None):
         print(f"✅ Created new '{tab_name}' tab with columns: {columns}")
     return ws
 
+
+def get_or_create_tab(tab_name, columns=None):
+    ws = ensure_tab(tab_name, columns)
+    if ws is None:
+        raise RuntimeError(f"Cannot access or create tab: {tab_name}")
+    return ws
+
+
 # ----------------------
-# Append to Sheet
+# Append / Upsert Data
 # ----------------------
 def append_to_google_sheet(sheet_name, data_dict):
-    """
-    Appends a dictionary to a sheet. Creates sheet if missing.
-    Returns True on success, False on failure.
-    """
-    ws = ensure_tab(sheet_name, columns=list(data_dict.keys()))
-    if not ws:
-        return False
+    ws = get_or_create_tab(sheet_name, columns=list(data_dict.keys()))
     try:
         ws.append_row(list(data_dict.values()))
         return True
@@ -84,13 +87,33 @@ def append_to_google_sheet(sheet_name, data_dict):
         print(f"⚠️ Could not append to sheet {sheet_name}: {e}")
         return False
 
+
+def upsert_to_sheet(sheet_name, key_col, data_dict):
+    """
+    Adds or updates a row based on key_col (like Email or ID)
+    """
+    ws = get_or_create_tab(sheet_name, columns=list(data_dict.keys()))
+    df = get_sheet_data(sheet_name)
+    df[key_col + "_lower"] = df[key_col].astype(str).str.lower()
+    key_val_lower = str(data_dict[key_col]).lower()
+
+    if key_val_lower in df[key_col + "_lower"].values:
+        row_idx = df.index[df[key_col + "_lower"] == key_val_lower][0] + 2  # +2 for header
+        for col, val in data_dict.items():
+            if col in df.columns:
+                try:
+                    col_idx = df.columns.get_loc(col) + 1
+                    ws.update_cell(row_idx, col_idx, val)
+                except Exception as e:
+                    print(f"⚠️ Could not update cell {col}: {e}")
+    else:
+        append_to_google_sheet(sheet_name, data_dict)
+
+
 # ----------------------
-# Fetch Sheet Data as DataFrame
+# Get Sheet as DataFrame
 # ----------------------
 def get_sheet_data(sheet_name):
-    """
-    Returns the given worksheet as a Pandas DataFrame.
-    """
     try:
         ws = get_sheet(sheet_name)
         if not ws:
@@ -101,27 +124,32 @@ def get_sheet_data(sheet_name):
         print(f"⚠️ Could not fetch data from {sheet_name}: {e}")
         return pd.DataFrame()
 
+
+def load_sheet_df(sheet_name, parse_dates=None, numeric_cols=None):
+    df = get_sheet_data(sheet_name)
+    if df.empty:
+        return df
+    if parse_dates:
+        for col in parse_dates:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors="coerce")
+    if numeric_cols:
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+    return df
+
+
 # ----------------------
-# Upload file to Google Drive
+# Upload to Drive
 # ----------------------
 def upload_image_to_drive(file_obj, filename, folder_id=None):
-    """
-    Uploads a file-like object to Google Drive and returns the shareable link.
-    folder_id: optional Google Drive folder ID
-    """
-    raw = os.environ.get("GOOGLE_CREDENTIALS_JSON") or os.environ.get("GOOGLE_CREDENTIALS")
-    if not raw:
-        print("⚠️ GOOGLE_CREDENTIALS or GOOGLE_CREDENTIALS_JSON not set")
+    file_obj.seek(0)  # ensure pointer at start
+    creds = get_google_credentials()
+    if not creds:
         return None
-
     try:
-        info = json.loads(raw)
-        creds = Credentials.from_service_account_info(
-            info,
-            scopes=["https://www.googleapis.com/auth/drive"]
-        )
         service = build('drive', 'v3', credentials=creds)
-
         media = MediaIoBaseUpload(io.BytesIO(file_obj.read()), mimetype="image/png")
         file_metadata = {"name": filename}
         if folder_id:
@@ -134,76 +162,45 @@ def upload_image_to_drive(file_obj, filename, folder_id=None):
         ).execute()
 
         file_id = uploaded.get("id")
-
-        # Make file shareable
-        service.permissions().create(
-            fileId=file_id,
-            body={"role": "reader", "type": "anyone"}
-        ).execute()
-
+        service.permissions().create(fileId=file_id, body={"role": "reader", "type": "anyone"}).execute()
         return f"https://drive.google.com/uc?id={file_id}"
     except Exception as e:
         print(f"⚠️ Failed to upload image: {e}")
         return None
 
+
 # ----------------------
-# User Activity Helpers
+# User / Dealership Helpers
 # ----------------------
 def get_user_activity_data():
-    """
-    Returns 'User_Activity' as DataFrame.
-    """
-    ws = ensure_tab("User_Activity", columns=["Email", "Start_Date", "Expiry_Date", "Status", "Usage_Count"])
+    ws = get_or_create_tab("User_Activity", columns=["Email", "Start_Date", "Expiry_Date", "Status", "Usage_Count"])
     try:
         records = ws.get_all_records()
         df = pd.DataFrame(records)
     except Exception as e:
         print(f"⚠️ Could not fetch User_Activity: {e}")
-        df = pd.DataFrame(columns=["Email", "Start_Date", "Expiry_Date", "Status", "Usage_Count"])
+        df = pd.DataFrame(columns=["Email","Start_Date","Expiry_Date","Status","Usage_Count"])
 
-    # Convert types
-    for col in ["Start_Date", "Expiry_Date"]:
+    for col in ["Start_Date","Expiry_Date"]:
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors="coerce")
     if "Usage_Count" in df.columns:
         df["Usage_Count"] = pd.to_numeric(df["Usage_Count"], errors="coerce").fillna(0).astype(int)
     return df
 
-# ----------------------
-# Dealership Profile Helpers
-# ----------------------
-def save_dealership_profile(email, profile_dict):
-    """
-    Saves or updates a dealership profile in 'Dealership_Profiles'.
-    """
-    ws = ensure_tab("Dealership_Profiles", columns=list(profile_dict.keys()))
-    df = get_sheet_data("Dealership_Profiles")
-    df["Email_lower"] = df["Email"].astype(str).str.lower()
-    email_lower = email.lower()
 
-    if email_lower in df["Email_lower"].values:
-        row_idx = df.index[df["Email_lower"] == email_lower][0] + 2
-        for col, val in profile_dict.items():
-            try:
-                col_idx = df.columns.get_loc(col) + 1
-                ws.update_cell(row_idx, col_idx, val)
-            except Exception as e:
-                print(f"⚠️ Could not update cell {col}: {e}")
-    else:
-        profile_dict["Email"] = email
-        append_to_google_sheet("Dealership_Profiles", profile_dict)
+def save_dealership_profile(email, profile_dict):
+    profile_dict["Email"] = email
+    upsert_to_sheet("Dealership_Profiles", key_col="Email", data_dict=profile_dict)
     return True
 
-def get_dealership_profile(email):
-    """
-    Returns full dealership profile, including trial info and remaining listings.
-    """
-    from backend.trial_manager import get_user_activity_data, TRIAL_DAYS, MAX_FREE_LISTINGS
 
+def get_dealership_profile(email):
+    from backend.trial_manager import TRIAL_DAYS, MAX_FREE_LISTINGS
     df = get_user_activity_data()
     email_lower = email.lower()
     df["Email_lower"] = df["Email"].astype(str).str.lower()
-    matches = df[df["Email_lower"] == email_lower]
+    matches = df[df["Email_lower"]==email_lower]
 
     if matches.empty:
         trial_status = "new"
@@ -212,11 +209,11 @@ def get_dealership_profile(email):
     else:
         last_row = matches.iloc[-1]
         trial_expiry = pd.to_datetime(last_row.get("Expiry_Date", pd.Timestamp.utcnow() + pd.Timedelta(days=TRIAL_DAYS)))
-        usage_count = int(last_row.get("Usage_Count", 0))
+        usage_count = int(last_row.get("Usage_Count",0))
         trial_status = "active" if pd.Timestamp.utcnow() <= trial_expiry else "expired"
 
     plan = "Free Trial"
-    remaining_listings = max(MAX_FREE_LISTINGS - usage_count, 0)
+    remaining_listings = max(MAX_FREE_LISTINGS - usage_count,0)
 
     return {
         "Email": email,
@@ -227,93 +224,64 @@ def get_dealership_profile(email):
         "Remaining_Listings": remaining_listings
     }
 
+
 # ----------------------
 # Inventory Helpers
 # ----------------------
-def save_inventory_item(data_dict):
-    """
-    Append a car listing to 'Inventory'.
-    """
-    required_cols = ["Email", "Timestamp", "Make", "Model", "Year", "Mileage",
-                     "Color", "Fuel", "Transmission", "Price", "Features", "Notes", "Status"]
-    for col in required_cols:
-        if col not in data_dict:
-            data_dict[col] = ""
+def save_inventory_item(data_dict, unique_id=None):
+    if unique_id:
+        data_dict["ID"] = unique_id
+        return upsert_to_sheet("Inventory", key_col="ID", data_dict=data_dict)
     return append_to_google_sheet("Inventory", data_dict)
+
 
 def get_inventory_for_user(email):
     df = get_sheet_data("Inventory")
     if df.empty:
         return df
     df["Email_lower"] = df["Email"].astype(str).str.lower()
-    return df[df["Email_lower"] == email.lower()]
+    return df[df["Email_lower"]==email.lower()]
 
-# ============================================================
-# ADDITIONAL FUNCTIONS USED BY ANALYTICS MODULE
-# ============================================================
 
-import pandas as pd
-
-def get_listing_history_df(email):
-    """
-    Returns a cleaned pandas DataFrame of all listings created by this user.
-    Sheet Name: Inventory
-    """
-    try:
-        df = get_sheet_data("Inventory")
-
-        if df.empty:
-            return pd.DataFrame()
-
-        # Standardize casing
-        df["Email"] = df["Email"].astype(str).str.lower()
-        email = email.lower()
-
-        user_df = df[df["Email"] == email].copy()
-        if user_df.empty:
-            return pd.DataFrame()
-
-        # Parse timestamp if exists
-        if "Timestamp" in user_df.columns:
-            user_df["Timestamp"] = pd.to_datetime(user_df["Timestamp"], errors="coerce")
-
-        return user_df
-
-    except Exception as e:
-        print(f"❌ Error in get_listing_history_df: {e}")
+def get_inventory_for_cars(email, car_ids):
+    df = get_inventory_for_user(email)
+    if df.empty or not car_ids:
         return pd.DataFrame()
+    return df.loc[df.index.isin(car_ids), ["Make","Model","Year","Mileage","Fuel","Price","Features"]]
+
+
+# ----------------------
+# Listing History & Social Media
+# ----------------------
+def get_listing_history_df(email):
+    df = get_sheet_data("Inventory")
+    if df.empty:
+        return pd.DataFrame()
+    df["Email"] = df["Email"].astype(str).str.lower()
+    user_df = df[df["Email"]==email.lower()].copy()
+    if "Timestamp" in user_df.columns:
+        user_df["Timestamp"] = pd.to_datetime(user_df["Timestamp"], errors="coerce")
+    return user_df
 
 
 def get_social_media_data(email):
-    """
-    Placeholder future function.
-    Returns engagement data for a user's social posts (if added later).
-    Currently returns an empty DataFrame.
-    """
     try:
         return pd.DataFrame({
-            "platform": ["TikTok", "Instagram", "YouTube"],
-            "views": [1200, 900, 500],
-            "likes": [87, 65, 41],
-            "clicks": [12, 8, 3]
+            "Email": [email]*3,
+            "Platform": ["TikTok","Instagram","YouTube"],
+            "Views": [1200,900,500],
+            "Likes": [87,65,41],
+            "Clicks": [12,8,3],
+            "Revenue": [500,700,300]
         })
-    except Exception as e:
-        print(f"❌ Error in get_social_media_data: {e}")
+    except:
         return pd.DataFrame()
 
 
 def filter_social_media(df, platform=None):
-    """
-    Optional filter wrapper.
-    """
-    try:
-        if df.empty:
-            return df
-        if platform:
-            return df[df["platform"].str.lower() == platform.lower()]
+    if df.empty:
         return df
-    except Exception as e:
-        print(f"❌ Error in filter_social_media: {e}")
-        return df
-
+    if platform:
+        return df[df["Platform"].str.lower()==platform.lower()]
+    return df
 

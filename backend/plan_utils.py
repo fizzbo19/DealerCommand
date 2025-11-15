@@ -12,7 +12,7 @@ def has_feature(plan, feature, trial_active=False):
     matrix = {
         "free": [],
         "premium": [],
-        "pro": ["analytics.pro"],
-        "platinum": ["analytics.pro","analytics.platinum"]
+        "pro": ["analytics.pro", "compare.cars"],
+        "platinum": ["analytics.pro","analytics.platinum","compare.cars", "ai.video_script"]
     }
     return feature in matrix.get(plan, [])
