@@ -1,4 +1,3 @@
-
 # backend/sheet_utils.py
 import os
 import json
@@ -9,13 +8,12 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 import io
 from datetime import datetime
+
+SHEET_ID = os.environ.get("SHEET_ID")
+
 print("🔍 Debug: Starting sheet_utils.py")
 print("🔍 SHEET_ID:", SHEET_ID)
 print("🔍 GOOGLE_CREDENTIALS present:", bool(os.environ.get("GOOGLE_CREDENTIALS") or os.environ.get("GOOGLE_CREDENTIALS_JSON")))
-
-
-
-SHEET_ID = os.environ.get("SHEET_ID")
 
 # ----------------------
 # Google Sheet Connection
