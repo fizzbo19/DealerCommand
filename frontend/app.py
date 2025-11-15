@@ -1,10 +1,10 @@
 # frontend/app.py
-import importlib.util
 import sys, os, io, json
 from datetime import datetime
 import streamlit as st
 import pandas as pd
 from openai import OpenAI
+import importlib.util
 
 # ----------------------
 # Local imports
@@ -13,6 +13,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from backend.trial_manager import get_dealership_status, check_listing_limit, increment_usage
 from backend.sheet_utils import append_to_google_sheet, get_sheet_data
 from backend.stripe_utils import create_checkout_session
+from backend.analytics_dashboard import show_analytics_dashboard  # <- cleaned import
 
 # ----------------------
 # Google Drive upload (graceful)
@@ -25,6 +26,7 @@ try:
 except ModuleNotFoundError:
     GOOGLE_API_AVAILABLE = False
     print("⚠️ googleapiclient not installed. Drive uploads disabled.")
+
 
 def upload_image_to_drive(file_obj, filename, folder_id=None):
     if not GOOGLE_API_AVAILABLE:
@@ -50,8 +52,9 @@ def upload_image_to_drive(file_obj, filename, folder_id=None):
         print(f"⚠️ Failed to upload image: {e}")
         return None
 
+
 # ----------------------
-# PAGE CONFIG & UI
+# PAGE CONFIG & LOGO
 # ----------------------
 st.set_page_config(page_title="DealerCommand AI | Smart Listings", layout="wide", page_icon="🚗")
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
@@ -89,6 +92,7 @@ expiry_date = profile["Trial_Expiry"]
 usage_count = profile["Usage_Count"]
 remaining_listings = profile["Remaining_Listings"]
 is_active = status in ["active", "new"]
+remaining_days = max((expiry_date - datetime.utcnow()).days, 0) if expiry_date else 0
 
 # ----------------------
 # FIRST-TIME DEALERSHIP INFO
@@ -121,7 +125,6 @@ with sidebar_tabs[0]:
     st.markdown(f"**📊 Listings Used:** `{usage_count}` / 15")
     st.progress(int(min((usage_count / 15) * 100, 100)))
     if is_active:
-        remaining_days = max((expiry_date - datetime.utcnow()).days, 0)
         st.markdown(f"**🟢 Status:** Active Trial")
         st.markdown(f"**⏳ Days Remaining:** `{remaining_days}` days")
         st.markdown(f"**📅 Ends On:** `{expiry_date.strftime('%B %d, %Y')}`")
@@ -183,9 +186,7 @@ with main_tabs[0]:
                 st.warning("⚠️ You have reached your free trial listing limit. Upgrade to continue.")
             else:
                 try:
-                    # ------------------------
-                    # 1️⃣ OpenAI Listing Generation
-                    # ------------------------
+                    # OpenAI Listing Generation
                     client = OpenAI(api_key=api_key)
                     prompt = f"""
 Write a 120–150 word engaging car listing:
@@ -203,19 +204,14 @@ Include emojis and SEO-rich phrasing.
                             temperature=0.7
                         )
 
-                    # Safe handling of AI response
-                    if response is None or not getattr(response, "choices", None):
-                        st.error("⚠️ OpenAI API returned no response. Please try again.")
-                        listing_text = ""
-                    else:
+                    listing_text = ""
+                    if response and getattr(response, "choices", None):
                         listing_text = response.choices[0].message.content.strip()
                         st.success("✅ Listing generated successfully!")
                         st.markdown(f"**Generated Listing:**\n\n{listing_text}")
                         st.download_button("⬇ Download Listing", listing_text, file_name="listing.txt")
 
-                    # ------------------------
-                    # 2️⃣ Upload Image (Optional)
-                    # ------------------------
+                    # Upload image
                     image_link = None
                     if car_image:
                         image_link = upload_image_to_drive(
@@ -225,9 +221,7 @@ Include emojis and SEO-rich phrasing.
                         if not image_link:
                             st.warning("⚠️ Failed to upload image. Listing will be saved without image.")
 
-                    # ------------------------
-                    # 3️⃣ Save Listing to Google Sheets
-                    # ------------------------
+                    # Save listing to Google Sheets
                     inventory_data = {
                         "Email": user_email,
                         "Timestamp": datetime.utcnow().isoformat(),
@@ -257,41 +251,25 @@ Include emojis and SEO-rich phrasing.
     else:
         st.warning("⚠️ Your trial has ended or listing limit reached. Please upgrade to continue.")
 
-
 # --- Analytics Dashboard ---
-
 with main_tabs[1]:
     st.markdown("### 📊 Analytics Dashboard")
-
-    # Ensure user_email and plan are set in session state
     if "user_email" not in st.session_state:
         st.session_state["user_email"] = user_email
     if "plan" not in st.session_state:
         st.session_state["plan"] = status.lower() if status else "free"
-    analytics_path = os.path.join(os.path.dirname(__file__), "pages", "3_Analytics.py")
-    spec = importlib.util.spec_from_file_location("analytics_dashboard", analytics_path)
-    analytics_dashboard = importlib.util.module_from_spec(spec)
-    sys.modules["analytics_dashboard"] = analytics_dashboard
-    spec.loader.exec_module(analytics_dashboard)
 
-    # Note: analytics_dashboard reads st.session_state["user_email"] and ["plan"] internally
-
-
-    # ACTIVE TRIAL → treat as PLATINUM access
     trial_is_active = status in ["active", "new"] and remaining_days > 0
 
     if trial_is_active:
         st.success("🎉 You have full Platinum access for 30 days! All analytics unlocked.")
         show_analytics_dashboard(user_email, "platinum")
     else:
-        # After trial → enforce plan rules
         plan = profile.get("Plan", "free").lower()
-
         if plan == "free":
             st.info("Upgrade to unlock full analytics.")
         else:
             show_analytics_dashboard(user_email, plan)
-
 
 # --- Inventory Tab ---
 with main_tabs[2]:
