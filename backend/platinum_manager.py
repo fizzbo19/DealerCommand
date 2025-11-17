@@ -1,4 +1,5 @@
 # backend/platinum_manager.py
+
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -86,7 +87,10 @@ def get_platinum_top_recommendations(email, top_n=5, demo_mode=False):
         return []
 
     df = df.copy()
-    df["Price_Num"] = pd.to_numeric(df.get("Price", 0).replace("£","").replace(",",""), errors="coerce").fillna(0)
+    df["Price_Num"] = pd.to_numeric(
+        df.get("Price", 0).astype(str).str.replace("£","").str.replace(",",""),
+        errors="coerce"
+    ).fillna(0)
     df["Timestamp"] = pd.to_datetime(df.get("Timestamp", datetime.utcnow()), errors="coerce")
     df = df.sort_values(["Price_Num", "Timestamp"], ascending=[False, False])
     top_df = df.head(top_n)
@@ -120,6 +124,7 @@ def get_platinum_dashboard(email, demo_mode=False):
 def generate_ai_video_script(email, listing_data):
     if not ai_client:
         return "⚠️ OpenAI API key not configured."
+
     prompt = f"""
 You are a professional automotive copywriter. Create a 90–120 second AI video script for the following car listing:
 
@@ -177,12 +182,12 @@ def competitor_monitoring(email, competitor_csv=None, sheet_name=None):
 # ----------------------
 # WEEKLY CONTENT CALENDAR
 # ----------------------
-def generate_weekly_content_calendar(email, plan="platinum", demo_mode=False):
-    inventory_df = generate_demo_inventory() if demo_mode else get_inventory_for_user(email)
+def generate_weekly_content_calendar(email, top_n=5, demo_mode=False):
+    inventory_df = generate_demo_inventory(top_n) if demo_mode else get_inventory_for_user(email)
     if inventory_df.empty:
         return pd.DataFrame(), "No inventory to generate content calendar."
 
-    top_listings = get_platinum_top_recommendations(email, top_n=5, demo_mode=demo_mode)
+    top_listings = get_platinum_top_recommendations(email, top_n=top_n, demo_mode=demo_mode)
     week_days = ["Monday","Wednesday","Friday"]
     calendar_rows = []
 
@@ -197,59 +202,3 @@ def generate_weekly_content_calendar(email, plan="platinum", demo_mode=False):
 
     df_calendar = pd.DataFrame(calendar_rows)
     return df_calendar, f"Weekly content calendar generated with {len(df_calendar)} posts."
-
-
-PLAT_API = "platinum"
-
-# ----------------------------
-# Check Platinum Plan Status
-# ----------------------------
-def get_platinum_status(email):
-    res = api_get(f"{PLAT_API}?email={email}")
-    return res or {"plan": "Free Trial"}
-
-
-# ----------------------------
-# Increment Premium Usage
-# ----------------------------
-def increment_platinum_usage(email, count=1):
-    return api_post(PLAT_API, {
-        "action": "increment",
-        "email": email,
-        "count": count
-    })
-
-
-# ----------------------------
-# Upgrade to Platinum
-# ----------------------------
-def upgrade_to_platinum(email):
-    return api_post(PLAT_API, {
-        "action": "upgrade",
-        "email": email
-    })
-
-# backend/platinum_manager.py
-
-
-def is_platinum(email):
-    return True
-
-def can_add_listing(email):
-    return True
-
-def increment_platinum_usage(email, count=1):
-    return True
-
-def get_platinum_remaining_listings(email):
-    return 100
-
-def generate_ai_video_script(listing_text):
-    return f"🎬 Video Script: {listing_text}"
-
-def competitor_monitoring(email):
-    return []
-
-def generate_weekly_content_calendar(email):
-    days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
-    return [{"Day":d,"Content":random.choice(["Listing","Video","Tips"])} for d in days]
