@@ -1,4 +1,3 @@
-# frontend/app.py
 import sys, os, io, json
 from datetime import datetime, timedelta
 import streamlit as st
@@ -116,13 +115,14 @@ def openai_generate(prompt, model="gpt-4o-mini", temperature=0.7):
         return ""
 
 # ---------------------------------------------------------
-# DEALERSHIP LOGIN
+# DEALERSHIP LOGIN (Updated for persistent trial tracking)
 # ---------------------------------------------------------
 user_email = st.text_input("📧 Dealership email", placeholder="e.g. sales@autohub.co.uk")
 if not user_email:
     st.info("👋 Enter your dealership email above to start your 30-day free trial.")
     st.stop()
 
+# Use the full status from trial_manager
 profile = get_dealership_status(user_email)
 plan = profile.get("Plan", "free").lower()
 status = profile.get("Trial_Status", "new")
@@ -130,46 +130,28 @@ usage_count = profile.get("Usage_Count", 0)
 remaining_listings = profile.get("Remaining_Listings", 15)
 is_active = status in ["active", "new"]
 
-# --- START FIX: PERSISTENT TRIAL TRACKING ---
+# --- FIX: Calculate trial days based on persistent Expiry Date from backend ---
 
-TRIAL_DURATION_DAYS = 30
-trial_start_date_str = profile.get("Trial_Start_Date")
+TRIAL_EXPIRY_DATE = profile.get("Trial_Expiry") # This is a datetime object from trial_manager
 
-if trial_start_date_str:
-    # 1. If date exists, load it from the backend/profile
-    try:
-        # Convert stored date string back to datetime object
-        trial_start_date = datetime.fromisoformat(trial_start_date_str)
-    except ValueError:
-        st.error("⚠️ Invalid Trial Start Date format found in profile.")
-        trial_start_date = datetime.utcnow() # Fallback
+if TRIAL_EXPIRY_DATE:
+    time_remaining = TRIAL_EXPIRY_DATE - datetime.utcnow()
+    trial_days_left = max(0, time_remaining.days)
+    is_trial_active = time_remaining.total_seconds() > 0
 else:
-    # 2. If date does not exist (first time logging in), set it and save it persistently
-    trial_start_date = datetime.utcnow()
-    
-    # Store the trial start date in the Google Sheet (Dealer Profile)
-    # NOTE: This assumes append_to_google_sheet can update existing rows based on Email.
-    # If not, you may need a dedicated 'update_profile' function in sheet_utils.
-    append_to_google_sheet("Dealership_Profiles", {
-        "Email": user_email,
-        "Trial_Start_Date": trial_start_date.isoformat(),
-        # Ensure other fields are included if append_to_google_sheet only adds new rows
-    })
+    # Fallback if Trial_Expiry is somehow missing
+    trial_days_left = 30
+    is_trial_active = True
 
-# Calculate remaining days based on the persistent date
-trial_end_date = trial_start_date + timedelta(days=TRIAL_DURATION_DAYS)
-time_remaining = trial_end_date - datetime.utcnow()
-trial_days_left = max(0, time_remaining.days)
-is_trial_active = time_remaining.total_seconds() > 0
+# current_plan logic simplified to rely on profile status
+current_plan = plan if not is_trial_active else 'platinum' # Assuming active trial defaults to platinum features
 
-# Set the current plan based on persistent status, not session state
-current_plan = "platinum" if is_trial_active else st.session_state.get('user_plan', plan)
-
-# --- END FIX: PERSISTENT TRIAL TRACKING ---
+# --- END FIX ---
 
 if not can_user_login(user_email, plan):
     st.error(f"🚫 Seat limit reached for {plan.capitalize()} plan. Please contact account admin or upgrade plan.")
     st.stop()
+
 # ---------------------------------------------------------
 # FIRST-TIME DEALER INFO
 # ---------------------------------------------------------
@@ -181,11 +163,13 @@ if status == "new":
         dealer_location = st.text_input("Location / City")
         submitted = st.form_submit_button("Save Info")
         if submitted:
-            append_to_google_sheet("Dealership_Profiles", {
-                "Email": user_email,
+            # save_dealership_profile handles UPSERT on Dealership_Profiles tab
+            from backend.sheet_utils import save_dealership_profile
+            save_dealership_profile(user_email, {
                 "Name": dealer_name,
                 "Phone": dealer_phone,
-                "Location": dealer_location
+                "Location": dealer_location,
+                # Trial_Status and Plan are handled by trial_manager
             })
             st.success("✅ Dealership info saved!")
 
@@ -274,7 +258,8 @@ Include emojis and SEO-rich phrasing.
                 }
                 if append_to_google_sheet("Inventory", inventory_data):
                     st.success("✅ Listing saved!")
-                    increment_platinum_usage(user_email, 1)
+                    # This calls decrement_listing_count which updates the usage in User_Activity tab
+                    increment_platinum_usage(user_email, 1) 
                 else:
                     st.error("⚠️ Failed to save listing.")
     else:
@@ -290,12 +275,10 @@ with main_tabs[1]:
     st.markdown("### 📊 Analytics Dashboard")
     show_demo_charts = st.checkbox("🎨 Show Demo Charts", value=True, key="show_demo_charts")
 
-    # --- FIX: Define selected_make and selected_model ---
-    # Define potential makes and models from demo data (or a sensible default set)
+    # --- FIX: Define selected_make and selected_model (Filter Widgets) ---
     all_makes = ["All", "BMW", "Audi", "Mercedes", "Tesla", "Jaguar", "Land Rover", "Porsche"]
     all_models = ["All", "X5 M Sport", "Q7", "GLE", "Q8", "X6", "GLC", "GLE Coupe", "X3 M", "Q5", "Model X", "iX", "e-tron", "F-Pace", "Discovery", "X4", "Cayenne", "M3", "RS7", "C63 AMG", "S-Class", "7 Series", "A8"]
     
-    # Create the filter widgets
     filter_col1, filter_col2 = st.columns(2)
     with filter_col1:
         selected_make = st.selectbox("Filter by Make", all_makes)
@@ -312,30 +295,20 @@ with main_tabs[1]:
             for p in range(0, 101, 25):
                 prog.progress(p)
 
-        # helper: get brand-specific image (FIXED WITH STATIC URLS for reliability)
+        # helper: get brand-specific image (FIXED with reliable picsum.photos placeholder)
         def get_car_image_url(make):
             """
-            Returns a reliable, publicly-hosted image URL for the given car make, 
-            or a generic car image if the make is not found.
+            Returns a generic, reliable placeholder image URL based on the car make (for unique caching).
+            This avoids the blocking issues encountered with Unsplash static links.
             """
             safe_make = str(make).split()[0].lower()
             
-            # Reliable, publicly hosted static images (High probability of working)
-            static_images = {
-                "bmw": "https://images.unsplash.com/photo-1583097893110-6815336d3e89?ixlib=rb-4.0.3&fit=crop&w=600&h=400",
-                "audi": "https://images.unsplash.com/photo-1549420067-1fa649d214a1?ixlib=rb-4.0.3&fit=crop&w=600&h=400",
-                "mercedes": "https://images.unsplash.com/photo-1616781423405-c1284a7536ab?ixlib=rb-4.0.3&fit=crop&w=600&h=400",
-                "tesla": "https://images.unsplash.com/photo-1558235222-acb8fe1b12b5?ixlib=rb-4.0.3&fit=crop&w=600&h=400",
-                "jaguar": "https://images.unsplash.com/photo-1629851722830-580a6b998240?ixlib=rb-4.0.3&fit=crop&w=600&h=400",
-                "porsche": "https://images.unsplash.com/photo-1547788426-38202562479f?ixlib=rb-4.0.3&fit=crop&w=600&h=400",
-                "land": "https://images.unsplash.com/photo-1552519503-f14125b04c8f?ixlib=rb-4.0.3&fit=crop&w=600&h=400", # Land Rover
-                "default": "https://images.unsplash.com/photo-1502877338535-766e14526848?ixlib=rb-4.0.3&fit=crop&w=600&h=400"
-            }
-            return static_images.get(safe_make, static_images["default"])
+            # Using the highly reliable Picsum service as a generic, unblockable placeholder.
+            return f"https://picsum.photos/seed/{safe_make}_car/600/400"
+
 
         # ----- Demo Data for 8 Dashboards (same as before) -----
         demo_data = [
-            # (Same demo_data 1..8 as you had previously) - kept full objects for function
             {
                 "top_recs": [
                     {"Year":"2021","Make":"BMW","Model":"X5 M Sport","Score":88},
@@ -734,7 +707,8 @@ with main_tabs[2]:
         for idx, row in filtered.iterrows():
             st.subheader(f"{row.get('Year','')} {row.get('Make','')} {row.get('Model','')}")
             if row.get("Image_Link"):
-                st.image(row["Image_Link"], width=300)
+                # Note: This image is uploaded to Drive, not a placeholder
+                st.image(row["Image_Link"], width=300) 
             details = {k: row.get(k,"-") for k in ["Mileage","Color","Fuel","Transmission","Price","Features","Notes"]}
             st.table(pd.DataFrame(details.items(), columns=["Attribute","Value"]))
             st.markdown("#### Listing Description")
@@ -742,4 +716,3 @@ with main_tabs[2]:
             st.markdown("---")
     except Exception as e:
         st.error(f"⚠️ Error loading inventory: {e}")
-
