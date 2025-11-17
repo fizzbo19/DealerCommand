@@ -295,16 +295,15 @@ with main_tabs[1]:
             for p in range(0, 101, 25):
                 prog.progress(p)
 
-        # helper: get brand-specific image (FIXED with reliable picsum.photos placeholder)
+        # helper: get brand-specific image (FIXED with Placehold.co for clear labeling)
         def get_car_image_url(make):
             """
-            Returns a generic, reliable placeholder image URL based on the car make (for unique caching).
-            This avoids the blocking issues encountered with Unsplash static links.
+            Returns a simple, labeled image placeholder (600x400) showing the car make 
+            for clear context in the demo dashboard.
             """
-            safe_make = str(make).split()[0].lower()
-            
-            # Using the highly reliable Picsum service as a generic, unblockable placeholder.
-            return f"https://picsum.photos/seed/{safe_make}_car/600/400"
+            text = str(make).split()[0].upper() + "%20CAR"
+            # Format: https://placehold.co/{width}x{height}/{background color}/{text color}?text={text}
+            return f"https://placehold.co/600x400/31363F/F0F7FF?text={text}"
 
 
         # ----- Demo Data for 8 Dashboards (same as before) -----
