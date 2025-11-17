@@ -48,6 +48,27 @@ def append_to_google_sheet(sheet_name, data_dict):
     }
     return call_script(payload)
 
+# ----------------------
+# Append / Upsert Data
+# ----------------------
+def append_to_google_sheet(sheet_name, data_dict):
+    """Note: Prefer upsert_to_sheet for unique records."""
+    ws = get_or_create_tab(sheet_name, columns=list(data_dict.keys()))
+    
+    # 🚨 CRITICAL FIX: Check if the worksheet object is a valid gspread object.
+    # We check for a reliable attribute like 'spreadsheet' which the DummyWorksheet lacks.
+    if not hasattr(ws, 'spreadsheet'):
+        print(f"⚠️ Failed to connect to spreadsheet. Cannot write data to '{sheet_name}'.")
+        # Now returns False, forcing the frontend to show the "Failed to save listing" error.
+        return False 
+    
+    try:
+        ws.append_row(list(data_dict.values()))
+        return True
+    except Exception as e:
+        print(f"⚠️ Could not append to sheet {sheet_name}: {e}")
+        return False
+
 # ------------------------------------
 # GET SHEET DATA
 # ------------------------------------
