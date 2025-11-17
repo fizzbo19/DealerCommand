@@ -10,6 +10,7 @@ from backend.sheet_utils import (
 )
 from openai import OpenAI
 import os
+import random
 
 # ----------------------
 # AI CLIENT
@@ -196,3 +197,59 @@ def generate_weekly_content_calendar(email, plan="platinum", demo_mode=False):
 
     df_calendar = pd.DataFrame(calendar_rows)
     return df_calendar, f"Weekly content calendar generated with {len(df_calendar)} posts."
+
+
+PLAT_API = "platinum"
+
+# ----------------------------
+# Check Platinum Plan Status
+# ----------------------------
+def get_platinum_status(email):
+    res = api_get(f"{PLAT_API}?email={email}")
+    return res or {"plan": "Free Trial"}
+
+
+# ----------------------------
+# Increment Premium Usage
+# ----------------------------
+def increment_platinum_usage(email, count=1):
+    return api_post(PLAT_API, {
+        "action": "increment",
+        "email": email,
+        "count": count
+    })
+
+
+# ----------------------------
+# Upgrade to Platinum
+# ----------------------------
+def upgrade_to_platinum(email):
+    return api_post(PLAT_API, {
+        "action": "upgrade",
+        "email": email
+    })
+
+# backend/platinum_manager.py
+
+
+def is_platinum(email):
+    return True
+
+def can_add_listing(email):
+    return True
+
+def increment_platinum_usage(email, count=1):
+    return True
+
+def get_platinum_remaining_listings(email):
+    return 100
+
+def generate_ai_video_script(listing_text):
+    return f"🎬 Video Script: {listing_text}"
+
+def competitor_monitoring(email):
+    return []
+
+def generate_weekly_content_calendar(email):
+    days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
+    return [{"Day":d,"Content":random.choice(["Listing","Video","Tips"])} for d in days]

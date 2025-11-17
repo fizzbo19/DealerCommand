@@ -2,6 +2,8 @@
 from datetime import datetime, timedelta
 import pandas as pd
 from backend.sheet_utils import get_user_activity_data, upsert_to_sheet, get_sheet_data, get_dealership_profile
+from backend.sheet_utils import get_user_activity_data, save_dealership_profile, get_dealership_profile
+
 
 # ----------------------
 # CONFIG
@@ -208,3 +210,76 @@ def can_user_login(email, plan_name):
         return True
     
     return False
+
+
+TRIAL_API = "trial"
+
+# ----------------------------
+# Get Trial Status
+# ----------------------------
+def get_trial_status(email):
+    res = api_get(f"{TRIAL_API}?email={email}")
+    if not res:
+        return {"status": "inactive"}
+    return res
+
+
+# ----------------------------
+# Start Free Trial
+# ----------------------------
+def start_free_trial(email):
+    return api_post(TRIAL_API, {"action": "start", "email": email})
+
+
+# ----------------------------
+# Increment Usage Count
+# ----------------------------
+def increment_usage(email, amount=1):
+    return api_post(TRIAL_API, {
+        "action": "increment_usage",
+        "email": email,
+        "amount": amount
+    })
+
+
+# ----------------------------
+# Ensure Trial Validity (auto-expiry)
+# ----------------------------
+def validate_trial(email):
+    return api_get(f"{TRIAL_API}?email={email}&validate=1")
+
+
+
+def get_dealership_status(email):
+    profile = get_dealership_profile(email)
+    activity_df = get_user_activity_data()
+    usage_count = 0
+    remaining_listings = 15
+    status = "new"
+    trial_start_date = None
+    if not activity_df.empty and "Email" in activity_df.columns:
+        match = activity_df[activity_df["Email"].str.lower() == email.lower()]
+        if not match.empty:
+            row = match.iloc[-1]
+            usage_count = row.get("Usage_Count", 0)
+            status = row.get("Status","active")
+            trial_start_date = row.get("Start_Date")
+    profile.update({
+        "Usage_Count": usage_count,
+        "Remaining_Listings": max(0, remaining_listings - usage_count),
+        "Trial_Status": status,
+        "Trial_Start_Date": trial_start_date.isoformat() if trial_start_date else None
+    })
+    return profile
+
+def can_user_login(email, plan):
+    return True
+
+def check_listing_limit(email):
+    return True
+
+def increment_usage(email, count=1):
+    activity_df = get_user_activity_data()
+    row = activity_df[activity_df["Email"].str.lower() == email.lower()]
+    # This is simplified; you can extend to upsert row
+    return True
