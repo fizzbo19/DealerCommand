@@ -130,16 +130,46 @@ usage_count = profile.get("Usage_Count", 0)
 remaining_listings = profile.get("Remaining_Listings", 15)
 is_active = status in ["active", "new"]
 
-if "platinum_trial_start" not in st.session_state:
-    st.session_state["platinum_trial_start"] = datetime.utcnow()
-trial_days_left = max(0, 30 - (datetime.utcnow() - st.session_state["platinum_trial_start"]).days)
-is_trial_active = trial_days_left > 0
+# --- START FIX: PERSISTENT TRIAL TRACKING ---
+
+TRIAL_DURATION_DAYS = 30
+trial_start_date_str = profile.get("Trial_Start_Date")
+
+if trial_start_date_str:
+    # 1. If date exists, load it from the backend/profile
+    try:
+        # Convert stored date string back to datetime object
+        trial_start_date = datetime.fromisoformat(trial_start_date_str)
+    except ValueError:
+        st.error("⚠️ Invalid Trial Start Date format found in profile.")
+        trial_start_date = datetime.utcnow() # Fallback
+else:
+    # 2. If date does not exist (first time logging in), set it and save it persistently
+    trial_start_date = datetime.utcnow()
+    
+    # Store the trial start date in the Google Sheet (Dealer Profile)
+    # NOTE: This assumes append_to_google_sheet can update existing rows based on Email.
+    # If not, you may need a dedicated 'update_profile' function in sheet_utils.
+    append_to_google_sheet("Dealership_Profiles", {
+        "Email": user_email,
+        "Trial_Start_Date": trial_start_date.isoformat(),
+        # Ensure other fields are included if append_to_google_sheet only adds new rows
+    })
+
+# Calculate remaining days based on the persistent date
+trial_end_date = trial_start_date + timedelta(days=TRIAL_DURATION_DAYS)
+time_remaining = trial_end_date - datetime.utcnow()
+trial_days_left = max(0, time_remaining.days)
+is_trial_active = time_remaining.total_seconds() > 0
+
+# Set the current plan based on persistent status, not session state
 current_plan = "platinum" if is_trial_active else st.session_state.get('user_plan', plan)
+
+# --- END FIX: PERSISTENT TRIAL TRACKING ---
 
 if not can_user_login(user_email, plan):
     st.error(f"🚫 Seat limit reached for {plan.capitalize()} plan. Please contact account admin or upgrade plan.")
     st.stop()
-
 # ---------------------------------------------------------
 # FIRST-TIME DEALER INFO
 # ---------------------------------------------------------
