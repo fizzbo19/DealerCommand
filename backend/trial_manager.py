@@ -6,7 +6,9 @@ from backend.sheet_utils import (
     upsert_to_sheet,
     get_sheet_data,
     get_dealership_profile,
-    save_dealership_profile
+    save_dealership_profile,
+    api_get_dealership_profile
+
 )
 
 # ----------------------
@@ -158,7 +160,8 @@ def get_dealership_status(email: str):
     }
 
 def check_listing_limit(email: str):
-    profile = get_dealership_status(email)
+    profile = api_get_dealership_profile(user_email)
+
     return profile["Remaining_Listings"] > 0
 
 # ----------------------
