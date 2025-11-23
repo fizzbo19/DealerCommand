@@ -1,20 +1,33 @@
 # frontend/app.py
-import sys, os, io, json
-from datetime import datetime, timedelta
-import streamlit as st
-import pandas as pd
-import plotly.express as px
-from openai import OpenAI
-import random
-import zipfile
-import uuid
+import sys
+import os
 
 # ---------------------------------------------------------
 # PATH SETUP
 # ---------------------------------------------------------
+# Add repo root and backend folder to sys.path for imports
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 BACKEND_DIR = os.path.join(BASE_DIR, "backend")
-sys.path.extend([BASE_DIR, BACKEND_DIR])
+sys.path.insert(0, BASE_DIR)
+sys.path.insert(0, BACKEND_DIR)
+
+# ---------------------------------------------------------
+# STANDARD LIBRARIES
+# ---------------------------------------------------------
+import io
+import json
+import random
+import zipfile
+import uuid
+from datetime import datetime, timedelta
+
+# ---------------------------------------------------------
+# THIRD-PARTY LIBRARIES
+# ---------------------------------------------------------
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+from openai import OpenAI
 
 # ---------------------------------------------------------
 # LOCAL IMPORTS (backend helpers)
@@ -25,7 +38,11 @@ from backend.trial_manager import (
     increment_usage,
     can_user_login
 )
-from backend.sheet_utils import append_to_google_sheet, get_sheet_data, get_inventory_for_user
+from backend.sheet_utils import (
+    append_to_google_sheet,
+    get_sheet_data,
+    get_inventory_for_user
+)
 from backend.plan_utils import has_feature
 from backend.stripe_utils import create_checkout_session
 from backend.analytics import analytics_dashboard, generate_demo_data
