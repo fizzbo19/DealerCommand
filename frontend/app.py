@@ -1,22 +1,26 @@
-import sys, os, io, json
+# frontend/app.py
+import sys
+import os
+import io
+import json
+import random
+import zipfile
 from datetime import datetime, timedelta
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 from openai import OpenAI
-import random
-import io
-import zipfile
 
 # ---------------------------------------------------------
-# PATH SETUP
+# PATH SETUP (assumes frontend/app.py inside frontend/)
 # ---------------------------------------------------------
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 BACKEND_DIR = os.path.join(BASE_DIR, "backend")
 sys.path.extend([BASE_DIR, BACKEND_DIR])
 
 # ---------------------------------------------------------
-# LOCAL IMPORTS
+# LOCAL IMPORTS (backend modules you provided)
 # ---------------------------------------------------------
 from backend.trial_manager import (
     get_dealership_status,
@@ -24,41 +28,51 @@ from backend.trial_manager import (
     increment_usage,
     can_user_login
 )
-from backend.sheet_utils import append_to_google_sheet, get_sheet_data, get_inventory_for_user
-from backend.plan_utils import has_feature
-from backend.stripe_utils import create_checkout_session
-from backend.analytics import analytics_dashboard
+from backend.sheet_utils import append_to_google_sheet, get_sheet_data
 from backend.platinum_manager import (
-    is_platinum,
     can_add_listing,
-    get_platinum_dashboard,
     increment_platinum_usage,
-    get_platinum_remaining_listings,
-    generate_ai_video_script,
-    competitor_monitoring,
-    generate_weekly_content_calendar
+    get_platinum_remaining_listings
 )
-
+from backend.analytics import (
+    render_charts_for_streamlit,
+    pro_analytics,
+    generate_demo_data,
+)
 # ---------------------------------------------------------
-# GOOGLE DRIVE SETUP
+# GOOGLE DRIVE SETUP (optional)
 # ---------------------------------------------------------
 try:
     from google.oauth2.service_account import Credentials
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaIoBaseUpload
     GOOGLE_API_AVAILABLE = True
-except ModuleNotFoundError:
+except Exception:
     GOOGLE_API_AVAILABLE = False
-    print("⚠️ googleapiclient not installed. Drive uploads disabled.")
 
 def upload_image_to_drive(file_obj, filename, folder_id=None):
-    if not GOOGLE_API_AVAILABLE:
-        st.warning("⚠️ Google Drive upload unavailable.")
+    """
+    Uploads a file-like object to Google Drive and returns a shareable view URL.
+    Returns None on failure or if Drive is not available.
+    """
+    if file_obj is None:
         return None
+    if not GOOGLE_API_AVAILABLE:
+        # fallback: store locally to /tmp and return path (useful for local testing)
+        local_dir = "/tmp/dealercommand_uploads"
+        os.makedirs(local_dir, exist_ok=True)
+        local_path = os.path.join(local_dir, filename)
+        try:
+            with open(local_path, "wb") as f:
+                file_obj.seek(0)
+                f.write(file_obj.read())
+            return local_path
+        except Exception:
+            return None
+
     try:
         raw = os.environ.get("GOOGLE_CREDENTIALS_JSON") or os.environ.get("GOOGLE_CREDENTIALS")
         if not raw:
-            st.warning("⚠️ GOOGLE_CREDENTIALS not set in environment.")
             return None
         info = json.loads(raw)
         creds = Credentials.from_service_account_info(info, scopes=["https://www.googleapis.com/auth/drive"])
@@ -70,20 +84,21 @@ def upload_image_to_drive(file_obj, filename, folder_id=None):
             file_metadata["parents"] = [folder_id]
         uploaded = service.files().create(body=file_metadata, media_body=media, fields="id").execute()
         file_id = uploaded.get("id")
+        # make public readable
         service.permissions().create(fileId=file_id, body={"role": "reader", "type": "anyone"}).execute()
         return f"https://drive.google.com/uc?id={file_id}"
     except Exception as e:
-        print(f"⚠️ Failed to upload image: {e}")
+        print("Drive upload failed:", e)
         return None
 
 # ---------------------------------------------------------
-# PAGE CONFIG
+# STREAMLIT PAGE CONFIG
 # ---------------------------------------------------------
 st.set_page_config(page_title="DealerCommand AI | Smart Listings", layout="wide", page_icon="🚗")
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
 LOGO_FILE = os.path.join(ASSETS_DIR, "dealercommand_logov1.png")
 if os.path.exists(LOGO_FILE):
-    st.sidebar.image(LOGO_FILE, width=160, caption="DealerCommand AI")
+    st.sidebar.image(LOGO_FILE, width=160)
 else:
     st.sidebar.markdown("**DealerCommand AI**")
 
@@ -91,70 +106,64 @@ st.markdown('<h2 style="text-align:center;">🚗 DealerCommand AI</h2>', unsafe_
 st.markdown('<div class="hero-sub">Create high-converting, SEO-optimised car listings in seconds with AI.</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# OPENAI API KEY
+# OPENAI CLIENT
 # ---------------------------------------------------------
-api_key = os.environ.get("OPENAI_API_KEY")
-if not api_key:
-    st.error("⚠️ Missing OpenAI API key. Set `OPENAI_API_KEY` in environment.")
+API_KEY = os.environ.get("OPENAI_API_KEY")
+if not API_KEY:
+    st.error("⚠️ Missing OPENAI_API_KEY environment variable.")
     st.stop()
-client = OpenAI(api_key=api_key)
+client = OpenAI(api_key=API_KEY)
 
-def openai_generate(prompt, model="gpt-4o-mini", temperature=0.7):
+def openai_generate(prompt, model="gpt-4o-mini", temperature=0.6, max_tokens=250):
     try:
         resp = client.chat.completions.create(
             model=model,
-            messages=[{"role":"system","content":"You are a top-tier automotive copywriter."},
-                      {"role":"user","content":prompt}],
-            temperature=temperature
+            messages=[
+                {"role":"system","content":"You are an expert automotive analyst and copywriter."},
+                {"role":"user","content":prompt}
+            ],
+            temperature=temperature,
+            max_tokens=max_tokens
         )
         if resp and getattr(resp, "choices", None):
             return resp.choices[0].message.content.strip()
         return ""
     except Exception as e:
-        st.error(f"⚠️ OpenAI API error: {e}")
-        return ""
+        print("OpenAI error:", e)
+        return f"⚠️ OpenAI error: {e}"
 
 # ---------------------------------------------------------
-# DEALERSHIP LOGIN (Updated for persistent trial tracking)
+# DEALERSHIP LOGIN / TRIAL
 # ---------------------------------------------------------
 user_email = st.text_input("📧 Dealership email", placeholder="e.g. sales@autohub.co.uk")
 if not user_email:
     st.info("👋 Enter your dealership email above to start your 30-day free trial.")
     st.stop()
 
-# Use the full status from trial_manager
+# get profile & trial info from backend/trial_manager
 profile = get_dealership_status(user_email)
 plan = profile.get("Plan", "free").lower()
 status = profile.get("Trial_Status", "new")
-usage_count = profile.get("Usage_Count", 0)
-remaining_listings = profile.get("Remaining_Listings", 15)
-is_active = status in ["active", "new"]
+usage_count = int(profile.get("Usage_Count", 0) or 0)
+remaining_listings = int(profile.get("Remaining_Listings", 15) or 15)
+trial_expiry = profile.get("Trial_Expiry")  # expected as datetime or None
 
-# --- FIX: Calculate trial days based on persistent Expiry Date from backend ---
-
-TRIAL_EXPIRY_DATE = profile.get("Trial_Expiry") # This is a datetime object from trial_manager
-
-if TRIAL_EXPIRY_DATE:
-    time_remaining = TRIAL_EXPIRY_DATE - datetime.utcnow()
-    trial_days_left = max(0, time_remaining.days)
-    is_trial_active = time_remaining.total_seconds() > 0
+# compute trial days left
+if isinstance(trial_expiry, datetime):
+    delta = trial_expiry - datetime.utcnow()
+    trial_days_left = max(0, delta.days)
+    is_trial_active = delta.total_seconds() > 0
 else:
-    # Fallback if Trial_Expiry is somehow missing
     trial_days_left = 30
-    is_trial_active = True
+    is_trial_active = True if status in ("new","active") else False
 
-# current_plan logic simplified to rely on profile status
-current_plan = plan if not is_trial_active else 'platinum' # Assuming active trial defaults to platinum features
-
-# --- END FIX ---
+current_plan = "platinum" if is_trial_active else plan
 
 if not can_user_login(user_email, plan):
-    st.error(f"🚫 Seat limit reached for {plan.capitalize()} plan. Please contact account admin or upgrade plan.")
+    st.error(f"🚫 Seat limit reached for {plan.capitalize()} plan.")
     st.stop()
 
-# ---------------------------------------------------------
-# FIRST-TIME DEALER INFO
-# ---------------------------------------------------------
+# first-time onboarding
 if status == "new":
     st.info("👋 Welcome! Please provide your dealership info to start your trial.")
     with st.form("dealer_info_form"):
@@ -163,19 +172,20 @@ if status == "new":
         dealer_location = st.text_input("Location / City")
         submitted = st.form_submit_button("Save Info")
         if submitted:
-            # save_dealership_profile handles UPSERT on Dealership_Profiles tab
-            from backend.sheet_utils import save_dealership_profile
-            save_dealership_profile(user_email, {
-                "Name": dealer_name,
-                "Phone": dealer_phone,
-                "Location": dealer_location,
-                # Trial_Status and Plan are handled by trial_manager
-            })
-            st.success("✅ Dealership info saved!")
+            # call backend save - keep minimal here (sheet_utils.save_dealership_profile)
+            try:
+                from backend.sheet_utils import save_dealership_profile
+                save_dealership_profile(user_email, {
+                    "Name": dealer_name,
+                    "Phone": dealer_phone,
+                    "Location": dealer_location,
+                    "Plan": plan
+                })
+                st.success("✅ Dealership info saved!")
+            except Exception as e:
+                st.error(f"⚠️ Failed to save dealership info: {e}")
 
-# ---------------------------------------------------------
-# SIDEBAR
-# ---------------------------------------------------------
+# Sidebar: plans + overview
 st.sidebar.markdown("### 💳 Upgrade Plans")
 plans = {
     "Premium": ["Social Media Analytics (basic)", "AI Captions (5/day)", "Inventory Upload (20 cars max)"],
@@ -192,13 +202,13 @@ if st.sidebar.button("Upgrade Plan"):
 
 st.sidebar.markdown("### 🎯 Trial Overview")
 st.sidebar.markdown(f"**👤 Email:** `{user_email}`")
-st.sidebar.markdown(f"**📊 Listings Used:** `{usage_count}` / 15")
+st.sidebar.markdown(f"**📊 Listings Used:** `{usage_count}` / {remaining_listings if not is_trial_active else 'unlimited (trial)'}")
 st.sidebar.progress(int(min((usage_count / 15) * 100, 100)))
 st.sidebar.markdown(f"**🟢 Status:** {'Trial Active' if is_trial_active else 'Trial Ended'}")
 st.sidebar.markdown(f"**⏳ Trial Days Remaining:** `{trial_days_left}`" if is_trial_active else "")
 
 # ---------------------------------------------------------
-# MAIN TABS
+# MAIN UI TABS
 # ---------------------------------------------------------
 main_tabs = st.tabs(["🧾 Generate Listing", "📊 Analytics Dashboard", "📈 Inventory"])
 
@@ -206,10 +216,10 @@ main_tabs = st.tabs(["🧾 Generate Listing", "📊 Analytics Dashboard", "📈 
 # GENERATE LISTING
 # ----------------
 with main_tabs[0]:
-    if is_active and (remaining_listings > 0 or current_plan=="platinum"):
+    allowed = (is_trial_active and current_plan == "platinum") or can_add_listing(user_email)
+    if allowed:
         st.markdown("### 🧾 Generate a New Listing")
-        
-        # Form definition moved inside the 'if' block to fix indentation issues
+
         with st.form("listing_form"):
             col1, col2 = st.columns(2)
             with col1:
@@ -225,274 +235,257 @@ with main_tabs[0]:
                 price = st.text_input("Price", "£45,995")
                 features = st.text_area("Key Features", "Panoramic roof, heated seats, M Sport package")
                 notes = st.text_area("Dealer Notes (optional)", "Full service history, finance available")
-            submitted = st.form_submit_button("✨ Generate Listing")
-        
-        if submitted:
-            if not can_add_listing(user_email):
-                st.warning("⚠️ Listing limit reached. Upgrade to Platinum for unlimited.")
-            else:
-                prompt = f"""
+            submit_listing = st.form_submit_button("✨ Generate Listing")
+
+        if submit_listing:
+            # generate listing text
+            prompt = f"""
 Write a 120–150 word engaging car listing:
 {year} {make} {model}, {mileage}, {color}, {fuel}, {transmission}, {price}.
 Features: {features}. Dealer Notes: {notes}.
-Include emojis and SEO-rich phrasing.
+Include emojis and SEO-rich phrasing and a short call-to-action.
 """
-                with st.spinner("🤖 Generating listing..."):
-                    listing_text = openai_generate(prompt)
-                st.success("✅ Listing generated!")
-                st.text_area("Generated Listing", listing_text, height=250)
-                st.download_button("⬇ Download Listing", listing_text, file_name=f"{make}_{model}_listing.txt")
-                image_link = upload_image_to_drive(car_image, f"{make}_{model}_{datetime.utcnow().isoformat()}.png") if car_image else ""
-                inventory_data = {
-                    "Email": user_email,
-                    "Timestamp": datetime.utcnow().isoformat(),
-                    "Make": make,
-                    "Model": model,
-                    "Year": year,
-                    "Mileage": mileage,
-                    "Color": color,
-                    "Fuel": fuel,
-                    "Transmission": transmission,
-                    "Price": price,
-                    "Features": features,
-                    "Notes": notes,
-                    "Listing": listing_text,
-                    "Image_Link": image_link or ""
-                }
-                if append_to_google_sheet("Inventory", inventory_data):
-                    st.success("✅ Listing saved!")
-                    # This calls decrement_listing_count which updates the usage in User_Activity tab
-                    increment_platinum_usage(user_email, 1) 
-                else:
-                    st.error("⚠️ Failed to save listing.")
+            with st.spinner("🤖 Generating listing..."):
+                listing_text = openai_generate(prompt, temperature=0.7, max_tokens=300)
+
+            st.success("✅ Listing generated!")
+            st.text_area("Generated Listing", listing_text, height=250)
+            st.download_button("⬇ Download Listing", listing_text, file_name=f"{make}_{model}_listing.txt")
+
+            # Upload image (if provided)
+            image_link = ""
+            if car_image is not None:
+                # convert streamlit UploadedFile to BytesIO for upload_image_to_drive
+                try:
+                    image_bytes = car_image.getvalue()
+                    image_file_like = io.BytesIO(image_bytes)
+                    filename = f"{user_email}_{make}_{model}_{datetime.utcnow().strftime('%Y%m%dT%H%M%S')}.png"
+                    uploaded = upload_image_to_drive(image_file_like, filename)
+                    if uploaded:
+                        image_link = uploaded
+                    else:
+                        st.warning("⚠️ Image not uploaded to Drive — saved locally or failed. Listing will still be saved.")
+                except Exception as e:
+                    st.warning(f"⚠️ Image processing failed: {e}")
+
+            # prepare inventory record
+            inventory_data = {
+                "Email": user_email,
+                "Timestamp": datetime.utcnow().isoformat(),
+                "Make": make,
+                "Model": model,
+                "Year": year,
+                "Mileage": mileage,
+                "Color": color,
+                "Fuel": fuel,
+                "Transmission": transmission,
+                "Price": price,
+                "Features": features,
+                "Notes": notes,
+                "Listing": listing_text,
+                "Image_Link": image_link or ""
+            }
+
+            # append to Google Sheets via sheet_utils.append_to_google_sheet
+            saved = False
+            try:
+                saved = append_to_google_sheet("Inventory", inventory_data)
+            except Exception as e:
+                st.error(f"⚠️ Exception saving listing: {e}")
+                saved = False
+
+            if saved:
+                st.success("✅ Listing saved to Inventory!")
+                # increment usage: if trial => increment platinum usage method, else normal increment
+                try:
+                    if is_trial_active:
+                        # if your platinum manager function expects different name, adjust
+                        increment_platinum_usage(user_email, 1)
+                    else:
+                        increment_usage(user_email, num=1)
+                except Exception:
+                    # best-effort: ignore increment failure but log in console
+                    print("Warning: failed to increment usage.")
+            else:
+                st.error("⚠️ Failed to save listing. Ensure sheet is accessible and correct columns exist.")
     else:
         st.warning("⚠️ Trial ended or listing limit reached. Upgrade to continue.")
 
 # ----------------
-# ANALYTICS DASHBOARD (Real Dealer Analytics + 5 Demo Dashboards)
+# ANALYTICS DASHBOARD
 # ----------------
-
 with main_tabs[1]:
     st.markdown("### 📊 Analytics Dashboard")
-    show_demo_charts = st.checkbox("🎨 Show Demo Dashboards", value=True, key="show_demo_charts")
 
-    # --- Filter Widgets ---
-    all_makes = ["All", "BMW", "Audi", "Mercedes", "Tesla", "Jaguar", "Land Rover", "Porsche"]
-    all_models = ["All", "X5 M Sport", "Q7", "GLE", "Q8", "X6", "GLC", "GLE Coupe", "X3 M", "Q5", "Model X", "iX", "e-tron", "F-Pace", "Discovery", "X4", "Cayenne", "M3", "RS7", "C63 AMG", "S-Class", "7 Series", "A8"]
-
-    filter_col1, filter_col2 = st.columns(2)
-    with filter_col1:
-        selected_make = st.selectbox("Filter by Make", all_makes)
-    with filter_col2:
-        selected_model = st.selectbox("Filter by Model", all_models)
-
-    # --- Dealer CSV Upload for Custom Dashboard ---
-    st.markdown("### 🔁 Upload your dealer inventory CSV")
+    # CSV upload for dealer analytics (preferred)
     dealer_csv = st.file_uploader(
-        "Upload CSV (optional) — generates a custom dashboard",
+        "Upload your inventory CSV (optional) — will generate a custom dashboard",
         type=["csv"],
         key="dealer_inventory_upload"
     )
 
-    def chart_ai_suggestion(chart_name, sample_data):
-        prompt = f"""
-You are an automotive sales analyst. Here is some inventory data sample:
-{sample_data}
-Provide 1 concise insight specifically about {chart_name} and 1 actionable suggestion to improve performance.
-"""
-        return openai_generate(prompt)
+    # quick helper to request AI insight
+    def ai_insight_for_chart(chart_name, sample_records):
+        sample_text = json.dumps(sample_records, default=str)[:1500]  # truncated
+        prompt = f"You are an automotive analytics assistant. Here is sample inventory data: {sample_text}\nGive a one-sentence insight about '{chart_name}' and one actionable suggestion (one sentence)."
+        return openai_generate(prompt, temperature=0.45, max_tokens=150)
 
-    # --------------------------
-    # REAL DEALER ANALYTICS
-    # --------------------------
-
+    # if dealer CSV is uploaded, use it as main analytics data
     if dealer_csv is not None:
         try:
             dealer_df = pd.read_csv(dealer_csv)
-            st.success("✅ Dealer inventory loaded. Generating custom dashboard...")
+            st.success("✅ Dealer inventory loaded. Generating analytics...")
 
-            # Clean numeric columns
+            # ensure numeric Price/Mileage columns
             if "Price" in dealer_df.columns:
-                dealer_df["Price_numeric"] = pd.to_numeric(
-                    dealer_df["Price"].replace('£','', regex=True).replace(',','', regex=True),
-                    errors='coerce'
-                )
+                dealer_df["Price_numeric"] = pd.to_numeric(dealer_df["Price"].replace('£','',regex=True).replace(',','',regex=True), errors='coerce')
             else:
-                dealer_df["Price_numeric"] = 0
+                dealer_df["Price_numeric"] = pd.NA
 
             if "Mileage" in dealer_df.columns:
-                dealer_df["Mileage_numeric"] = pd.to_numeric(
-                    dealer_df["Mileage"].str.replace(" miles","").str.replace(",",""),
-                    errors="coerce"
-                )
+                # handle formats like '28,000 miles'
+                try:
+                    dealer_df["Mileage_numeric"] = dealer_df["Mileage"].astype(str).str.replace(" miles","", regex=False).str.replace(",","", regex=False)
+                    dealer_df["Mileage_numeric"] = pd.to_numeric(dealer_df["Mileage_numeric"], errors='coerce')
+                except Exception:
+                    dealer_df["Mileage_numeric"] = pd.NA
             else:
-                dealer_df["Mileage_numeric"] = 0
+                dealer_df["Mileage_numeric"] = pd.NA
 
-            if "Timestamp" in dealer_df.columns:
-                dealer_df["Timestamp"] = pd.to_datetime(dealer_df["Timestamp"], errors="coerce")
-                dealer_df["Date"] = dealer_df["Timestamp"].dt.date
-
-            # --- Summary Metrics ---
+            # Standard KPIs
             st.markdown("#### Dealer Inventory Summary")
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Total Cars", len(dealer_df))
-            col2.metric("Average Price", f"£{int(dealer_df['Price_numeric'].mean()):,}" if len(dealer_df)>0 else "£0")
-            col3.metric("Average Mileage", f"{int(dealer_df['Mileage_numeric'].mean()):,} miles" if len(dealer_df)>0 else "-")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Total Cars", len(dealer_df))
+            c2.metric("Avg Price", f"£{int(dealer_df['Price_numeric'].mean()):,}" if not dealer_df["Price_numeric"].isna().all() else "£0")
+            c3.metric("Avg Mileage", f"{int(dealer_df['Mileage_numeric'].mean()):,} miles" if not dealer_df["Mileage_numeric"].isna().all() else "-")
+            most_common_make = dealer_df['Make'].mode()[0] if "Make" in dealer_df.columns and not dealer_df['Make'].dropna().empty else "-"
+            c4.metric("Top Make", most_common_make)
 
-            if "Make" in dealer_df.columns and len(dealer_df)>0:
-                col4.metric("Most Common Make", dealer_df['Make'].mode()[0])
-            else:
-                col4.metric("Most Common Make", "-")
-
-            # --- Charts ---
-            if "Price_numeric" in dealer_df.columns:
-                st.markdown("#### 🏷 Price Distribution")
+            # Price distribution
+            if "Price_numeric" in dealer_df.columns and not dealer_df["Price_numeric"].isna().all():
+                st.markdown("#### Price Distribution")
                 fig_price = px.histogram(dealer_df, x="Price_numeric", nbins=20, title="Price Distribution")
                 st.plotly_chart(fig_price, use_container_width=True)
-                st.info(f"💡 AI Insight: {chart_ai_suggestion('Price Distribution', dealer_df.head(10).to_dict(orient='records'))}")
+                st.info(f"💡 AI Insight: {ai_insight_for_chart('Price Distribution', dealer_df.head(10).to_dict(orient='records'))}")
 
+            # Mileage vs Price
             if "Mileage_numeric" in dealer_df.columns and "Price_numeric" in dealer_df.columns:
-                st.markdown("#### 🚗 Mileage vs Price")
-                fig_mileage = px.scatter(
-                    dealer_df,
-                    x="Mileage_numeric",
-                    y="Price_numeric",
-                    color="Make" if "Make" in dealer_df.columns else None,
-                    hover_data=["Model","Year"] if "Model" in dealer_df.columns and "Year" in dealer_df.columns else None,
-                    title="Mileage vs Price"
-                )
-                st.plotly_chart(fig_mileage, use_container_width=True)
-                st.info(f"💡 AI Insight: {chart_ai_suggestion('Mileage vs Price', dealer_df.head(10).to_dict(orient='records'))}")
+                st.markdown("#### Mileage vs Price")
+                fig_scatter = px.scatter(dealer_df, x="Mileage_numeric", y="Price_numeric",
+                                        color="Make" if "Make" in dealer_df.columns else None,
+                                        hover_data=["Model","Year"] if "Model" in dealer_df.columns and "Year" in dealer_df.columns else None,
+                                        title="Mileage vs Price")
+                st.plotly_chart(fig_scatter, use_container_width=True)
+                st.info(f"💡 AI Insight: {ai_insight_for_chart('Mileage vs Price', dealer_df.head(10).to_dict(orient='records'))}")
 
-            if "Date" in dealer_df.columns:
-                st.markdown("#### ⏱ Listings Over Time")
-                trends = dealer_df.groupby("Date").size().reset_index(name="Listings")
-                fig_trends = px.line(trends, x="Date", y="Listings", title="Listings Added Over Time", markers=True)
-                st.plotly_chart(fig_trends, use_container_width=True)
-                st.info(f"💡 AI Insight: {chart_ai_suggestion('Listings Over Time', dealer_df.head(10).to_dict(orient='records'))}")
+            # Listings over time if Timestamp present
+            if "Timestamp" in dealer_df.columns:
+                try:
+                    dealer_df["Timestamp"] = pd.to_datetime(dealer_df["Timestamp"], errors="coerce")
+                    dealer_df["Date"] = dealer_df["Timestamp"].dt.date
+                    trends = dealer_df.groupby("Date").size().reset_index(name="Listings")
+                    st.markdown("#### Listings Over Time")
+                    fig_trends = px.line(trends, x="Date", y="Listings", title="Listings Added Over Time", markers=True)
+                    st.plotly_chart(fig_trends, use_container_width=True)
+                    st.info(f"💡 AI Insight: {ai_insight_for_chart('Listings Over Time', dealer_df.head(10).to_dict(orient='records'))}")
+                except Exception:
+                    pass
 
+            # Inventory by Make
             if "Make" in dealer_df.columns:
-                st.markdown("#### 🏆 Top Makes")
-                make_counts = dealer_df['Make'].value_counts().reset_index()
-                make_counts.columns = ["Make","Count"]
+                st.markdown("#### Inventory by Make")
+                make_counts = dealer_df["Make"].value_counts().reset_index()
+                make_counts.columns = ["Make", "Count"]
                 fig_make = px.pie(make_counts, names="Make", values="Count", title="Inventory by Make")
                 st.plotly_chart(fig_make, use_container_width=True)
-                st.info(f"💡 AI Insight: {chart_ai_suggestion('Top Makes Pie Chart', dealer_df.head(10).to_dict(orient='records'))}")
+                st.info(f"💡 AI Insight: {ai_insight_for_chart('Inventory by Make', dealer_df.head(10).to_dict(orient='records'))}")
+
+            # Top models table
+            if "Model" in dealer_df.columns and "Price_numeric" in dealer_df.columns:
+                st.markdown("#### Top Models by Average Price")
+                top_models = dealer_df.groupby("Model")["Price_numeric"].mean().reset_index().sort_values("Price_numeric", ascending=False).head(10)
+                st.dataframe(top_models)
+                st.info(f"💡 AI Insight: {ai_insight_for_chart('Top Models', dealer_df.head(10).to_dict(orient='records'))}")
 
         except Exception as e:
-            st.error(f"⚠️ Error loading dealer CSV: {e}")
+            st.error(f"⚠️ Failed to read uploaded CSV: {e}")
+    else:
+        # No CSV uploaded - try to generate analytics from user's inventory sheet if available
+        try:
+            sheet_df = get_sheet_data("Inventory")
+            if sheet_df is None or sheet_df.empty:
+                st.info("No inventory found in the connected sheet. Upload a CSV to see analytics demo.")
+                # show small demo sample
+                demo_df = generate_demo_data()
+                st.markdown("#### Demo Analytics (no dealer data found)")
+                fig_demo = px.line(demo_df.groupby(demo_df['Date'].dt.to_period('M'))['Revenue'].sum().reset_index(), x="Date", y="Revenue", title="Demo Revenue Over Time")
+                st.plotly_chart(fig_demo, use_container_width=True)
+            else:
+                # filter to user's email
+                email_col = next((c for c in sheet_df.columns if str(c).lower() == "email"), None)
+                if email_col:
+                    user_df = sheet_df[sheet_df[email_col].astype(str).str.lower() == user_email.lower()].copy()
+                else:
+                    user_df = sheet_df.copy()
 
+                if user_df.empty:
+                    st.info("No listings for your account yet (in the Inventory sheet). Upload CSV if you want to preview analytics.")
+                else:
+                    # reuse some of the dealer_csv rendering logic for user_df
+                    # ensure numeric conversions
+                    if "Price" in user_df.columns:
+                        user_df["Price_numeric"] = pd.to_numeric(user_df["Price"].replace('£','',regex=True).replace(',','',regex=True), errors='coerce')
+                    if "Mileage" in user_df.columns:
+                        user_df["Mileage_numeric"] = pd.to_numeric(user_df["Mileage"].astype(str).str.replace(" miles","",regex=False).str.replace(",","",regex=False), errors='coerce')
 
-    # --------------------------
-    # 5 DEMO DASHBOARDS AT BOTTOM
-    # --------------------------
+                    st.markdown("#### Your Inventory Summary")
+                    a1, a2, a3, a4 = st.columns(4)
+                    a1.metric("Total Cars", len(user_df))
+                    a2.metric("Avg Price", f"£{int(user_df['Price_numeric'].mean()):,}" if "Price_numeric" in user_df.columns and not user_df['Price_numeric'].isna().all() else "£0")
+                    a3.metric("Avg Mileage", f"{int(user_df['Mileage_numeric'].mean()):,} miles" if "Mileage_numeric" in user_df.columns and not user_df['Mileage_numeric'].isna().all() else "-")
+                    a4.metric("Top Make", user_df['Make'].mode()[0] if "Make" in user_df.columns and not user_df['Make'].dropna().empty else "-")
 
-    # Define demo dashboards
-    demo_dashboards = [
-        {
-            "top_recs": [
-                {"Make": "BMW", "Model": "X5", "Year": 2021, "Score": 92},
-                {"Make": "Audi", "Model": "Q7", "Year": 2020, "Score": 88},
-                {"Make": "Mercedes", "Model": "GLE", "Year": 2022, "Score": 90},
-            ],
-            "social": [
-                {"Instagram Likes": random.randint(200,500), "Facebook Likes": random.randint(150,450), "Twitter Retweets": random.randint(50,150), "Website Clicks": random.randint(300,600), "Leads": random.randint(10,25)}
-                for _ in range(4)
-            ],
-            "inventory": [
-                {"Make":"BMW", "Average Price":48000},
-                {"Make":"Audi", "Average Price":47000},
-                {"Make":"Mercedes", "Average Price":52000},
-            ]
-        }
-    ] * 5  # multiply to create 5 demo dashboards
+                    # Revenue over time (if Timestamp exists and prices)
+                    if "Timestamp" in user_df.columns and "Price_numeric" in user_df.columns:
+                        try:
+                            user_df["Timestamp"] = pd.to_datetime(user_df["Timestamp"], errors="coerce")
+                            user_df["Date"] = user_df["Timestamp"].dt.date
+                            rev = user_df.groupby("Date")["Price_numeric"].sum().reset_index()
+                            fig_rev = px.line(rev, x="Date", y="Price_numeric", title="Revenue Over Time", markers=True)
+                            st.plotly_chart(fig_rev, use_container_width=True)
+                            st.info(f"💡 AI Insight: {ai_insight_for_chart('Revenue Over Time', user_df.head(10).to_dict(orient='records'))}")
+                        except Exception:
+                            pass
 
-    if show_demo_charts:
-        st.markdown("---")
-        st.markdown("### 🎨 Demo Dashboards for Reference")
+                    # Price distribution
+                    if "Price_numeric" in user_df.columns and not user_df["Price_numeric"].isna().all():
+                        fig_price_user = px.histogram(user_df, x="Price_numeric", nbins=20, title="Price Distribution")
+                        st.plotly_chart(fig_price_user, use_container_width=True)
+                        st.info(f"💡 AI Insight: {ai_insight_for_chart('Price Distribution', user_df.head(10).to_dict(orient='records'))}")
 
-        for i, data in enumerate(demo_dashboards, start=1):
+        except Exception as e:
+            st.error(f"⚠️ Error generating analytics: {e}")
 
-            # FILTER BY MAKE / MODEL
-            df_top = pd.DataFrame(data["top_recs"])
-            if selected_make != "All" and selected_make not in df_top["Make"].values:
-                continue
-            if selected_model != "All" and selected_model not in df_top["Model"].values:
-                continue
+    # -------- Demo dashboards at bottom (toggle)
+    st.markdown("---")
+    show_demo = st.checkbox("Show reference demo dashboards (5)", value=False)
+    if show_demo:
+        demo_data = generate_demo_data()  # returns a DataFrame for demo; we'll craft 5 visual examples
+        # create 5 small demo variants by sampling
+        demo_list = []
+        for i in range(5):
+            d = generate_demo_data()
+            demo_list.append(d)
 
-            st.markdown(f"## Demo Dashboard {i}")
-
-            # --- Top Recommendations ---
-            fig_top = px.bar(df_top, x="Model", y="Score", text="Score", color="Make", title=f"Top Recommendations Demo {i}")
-            st.plotly_chart(fig_top, use_container_width=True)
-            st.info(f"💡 AI Insight: {chart_ai_suggestion(f'Demo Top Recommendations {i}', df_top.head(3).to_dict(orient='records'))}")
-
-            # Car images
-            def get_car_image_url(make):
-                text = str(make).split()[0].upper() + "%20CAR"
-                return f"https://placehold.co/600x400/31363F/F0F7FF?text={text}"
-
-            st.markdown("**🚗 Sample Car Images**")
-            cols = st.columns(3)
-            for idx, row in df_top.iterrows():
-                img_url = get_car_image_url(row["Make"])
-                col = cols[idx % 3]
-                col.image(img_url, caption=f"{row['Year']} {row['Make']} {row['Model']}", use_container_width=True)
-
-            # --- Social Charts ---
-            df_social = pd.DataFrame(data["social"])
-            df_social["Week"] = ["Week 1","Week 2","Week 3","Week 4"]
-
-            st.markdown("#### 📈 Social Engagement")
-            fig_social_line = px.line(df_social, x="Week", y=["Instagram Likes","Facebook Likes","Twitter Retweets"], markers=True, title=f"Social Engagement Demo {i}")
-            st.plotly_chart(fig_social_line, use_container_width=True)
-
-            fig_clicks = px.bar(df_social, x="Week", y=["Website Clicks","Leads"], barmode="group", text_auto=True, title=f"Website Clicks & Leads Demo {i}")
-            st.plotly_chart(fig_clicks, use_container_width=True)
-
-            last_week = df_social.iloc[-1]
-            fig_pie = px.pie(
-                names=["Instagram Likes","Facebook Likes","Twitter Retweets"],
-                values=[last_week["Instagram Likes"], last_week["Facebook Likes"], last_week["Twitter Retweets"]],
-                title=f"Last Week Platform Engagement Demo {i}"
-            )
-            st.plotly_chart(fig_pie, use_container_width=True)
-
-            # --- Inventory ---
-            df_inv = pd.DataFrame(data["inventory"])
-            st.markdown("**Inventory Summary**")
-            st.table(df_inv)
-
-            st.markdown("**🚘 Inventory Images**")
-            inv_cols = st.columns(len(df_inv))
-            for idx, row in df_inv.iterrows():
-                img_url = get_car_image_url(row["Make"])
-                col = inv_cols[idx % len(inv_cols)]
-                col.image(img_url, caption=f"{row['Make']} - £{row['Average Price']:,}", use_container_width=True)
-
-            st.info(f"💡 AI Insight: {chart_ai_suggestion(f'Demo Inventory {i}', df_inv.head(3).to_dict(orient='records'))}")
-
-            # --- Video Script ---
-            st.markdown("### 🎬 AI Video Script Generator")
-            sample_listing = df_top.iloc[0]
-            demo_script = (
-                f"Introducing the {sample_listing['Year']} {sample_listing['Make']} {sample_listing['Model']}!\n"
-                "Luxury and performance combined. Perfect for family trips or city driving. 🚗💨"
-            )
-            st.text_area(f"🎬 Demo Video Script {i}", demo_script, height=150, key=f"demo_script_{i}")
-
-            st.download_button(
-                f"⬇ Download Demo Script {i}",
-                demo_script,
-                file_name=f"{sample_listing['Make']}_{sample_listing['Model']}_demo_script_{i}.txt",
-                key=f"download_demo_script_{i}"
-            )
-
+        for i, ddf in enumerate(demo_list, start=1):
+            st.markdown(f"### Demo Dashboard {i}")
+            # revenue
+            rev = ddf.groupby(ddf['Date'].dt.to_period('M'))['Revenue'].sum().reset_index()
+            rev['Date'] = pd.to_datetime(rev['Date'].astype(str))
+            fig = px.line(rev, x="Date", y="Revenue", title=f"Demo Revenue Over Time {i}")
+            st.plotly_chart(fig, use_container_width=True)
+            st.dataframe(ddf.head(6))
             st.markdown("---")
-
-
-
-
 
 # ----------------
 # INVENTORY TAB
@@ -503,28 +496,27 @@ with main_tabs[2]:
         df_inventory = get_sheet_data("Inventory")
         if df_inventory is None or df_inventory.empty:
             st.info("No inventory added yet.")
-            st.stop()
-
-        df_inventory.columns = [str(c).strip() for c in df_inventory.columns]
-        email_col = next((c for c in df_inventory.columns if c.lower() == "email"), None)
-        if not email_col:
-            st.error("⚠️ Inventory sheet missing an 'Email' column.")
-            st.stop()
-
-        df_inventory[email_col] = df_inventory[email_col].astype(str).str.lower()
-        filtered = df_inventory[df_inventory[email_col] == user_email.lower()]
-        if filtered.empty:
-            st.info("No listings for your account yet.")
-            st.stop()
-
-        for idx, row in filtered.iterrows():
-            st.subheader(f"{row.get('Year','')} {row.get('Make','')} {row.get('Model','')}")
-            if row.get("Image_Link"):
-                st.image(row["Image_Link"], width=300)
-            details = {k: row.get(k,"-") for k in ["Mileage","Color","Fuel","Transmission","Price","Features","Notes"]}
-            st.table(pd.DataFrame(details.items(), columns=["Attribute","Value"]))
-            st.markdown("#### Listing Description")
-            st.write(row.get("Listing","No description found."))
-            st.markdown("---")
+        else:
+            # normalize columns and locate email column
+            df_inventory.columns = [str(c).strip() for c in df_inventory.columns]
+            email_col = next((c for c in df_inventory.columns if c.lower() == "email"), None)
+            if not email_col:
+                st.error("⚠️ Inventory sheet missing an 'Email' column.")
+            else:
+                df_inventory[email_col] = df_inventory[email_col].astype(str).str.lower()
+                user_rows = df_inventory[df_inventory[email_col] == user_email.lower()]
+                if user_rows.empty:
+                    st.info("No listings for your account yet.")
+                else:
+                    for idx, row in user_rows.iterrows():
+                        st.subheader(f"{row.get('Year','')} {row.get('Make','')} {row.get('Model','')}")
+                        if row.get("Image_Link"):
+                            st.image(row["Image_Link"], width=300)
+                        details = {k: row.get(k, "-") for k in ["Mileage", "Color", "Fuel", "Transmission", "Price", "Features", "Notes"]}
+                        st.table(pd.DataFrame(details.items(), columns=["Attribute", "Value"]))
+                        st.markdown("#### Listing Description")
+                        st.write(row.get("Listing", "No description found."))
+                        st.markdown("---")
     except Exception as e:
         st.error(f"⚠️ Error loading inventory: {e}")
+
