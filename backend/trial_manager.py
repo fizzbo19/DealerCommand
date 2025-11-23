@@ -8,7 +8,6 @@ from backend.sheet_utils import (
     get_dealership_profile,
     save_dealership_profile,
     api_get_dealership_profile
-
 )
 
 # ----------------------
@@ -100,7 +99,7 @@ def ensure_user_and_get_status(email: str, plan="Free Trial"):
 # ----------------------
 def _update_activity_record(email: str, new_count: int, plan: str):
     """Update usage without resetting trial dates."""
-    status, expiry_date, start_date, _, _ = ensure_user_and_get_status(email)
+    status, expiry_date, start_date, _, _ = ensure_user_and_get_status(email, plan)
     data_to_save = {
         "Email": email,
         "Start_Date": start_date.strftime("%Y-%m-%d %H:%M:%S"),
@@ -160,9 +159,8 @@ def get_dealership_status(email: str):
     }
 
 def check_listing_limit(email: str):
-    profile = api_get_dealership_profile(user_email)
-
-    return profile["Remaining_Listings"] > 0
+    profile = api_get_dealership_profile(email)
+    return profile.get("Remaining_Listings", 0) > 0
 
 # ----------------------
 # MULTI-USER SEAT MANAGEMENT
