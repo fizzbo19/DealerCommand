@@ -269,10 +269,8 @@ Include emojis and SEO-rich phrasing.
         st.warning("⚠️ Trial ended or listing limit reached. Upgrade to continue.")
 
 # ----------------
-# ANALYTICS DASHBOARD (8 Unique Demo Dashboards + Extras)
+# ANALYTICS DASHBOARD (Real Dealer Analytics + 5 Demo Dashboards)
 # ----------------
-
-
 
 with main_tabs[1]:
     st.markdown("### 📊 Analytics Dashboard")
@@ -304,6 +302,10 @@ Provide 1 concise insight specifically about {chart_name} and 1 actionable sugge
 """
         return openai_generate(prompt)
 
+    # --------------------------
+    # REAL DEALER ANALYTICS
+    # --------------------------
+
     if dealer_csv is not None:
         try:
             dealer_df = pd.read_csv(dealer_csv)
@@ -311,13 +313,21 @@ Provide 1 concise insight specifically about {chart_name} and 1 actionable sugge
 
             # Clean numeric columns
             if "Price" in dealer_df.columns:
-                dealer_df["Price_numeric"] = pd.to_numeric(dealer_df["Price"].replace('£','', regex=True).replace(',','', regex=True), errors='coerce')
+                dealer_df["Price_numeric"] = pd.to_numeric(
+                    dealer_df["Price"].replace('£','', regex=True).replace(',','', regex=True),
+                    errors='coerce'
+                )
             else:
                 dealer_df["Price_numeric"] = 0
+
             if "Mileage" in dealer_df.columns:
-                dealer_df["Mileage_numeric"] = pd.to_numeric(dealer_df["Mileage"].str.replace(" miles","").str.replace(",",""), errors="coerce")
+                dealer_df["Mileage_numeric"] = pd.to_numeric(
+                    dealer_df["Mileage"].str.replace(" miles","").str.replace(",",""),
+                    errors="coerce"
+                )
             else:
                 dealer_df["Mileage_numeric"] = 0
+
             if "Timestamp" in dealer_df.columns:
                 dealer_df["Timestamp"] = pd.to_datetime(dealer_df["Timestamp"], errors="coerce")
                 dealer_df["Date"] = dealer_df["Timestamp"].dt.date
@@ -328,6 +338,7 @@ Provide 1 concise insight specifically about {chart_name} and 1 actionable sugge
             col1.metric("Total Cars", len(dealer_df))
             col2.metric("Average Price", f"£{int(dealer_df['Price_numeric'].mean()):,}" if len(dealer_df)>0 else "£0")
             col3.metric("Average Mileage", f"{int(dealer_df['Mileage_numeric'].mean()):,} miles" if len(dealer_df)>0 else "-")
+
             if "Make" in dealer_df.columns and len(dealer_df)>0:
                 col4.metric("Most Common Make", dealer_df['Make'].mode()[0])
             else:
@@ -342,10 +353,14 @@ Provide 1 concise insight specifically about {chart_name} and 1 actionable sugge
 
             if "Mileage_numeric" in dealer_df.columns and "Price_numeric" in dealer_df.columns:
                 st.markdown("#### 🚗 Mileage vs Price")
-                fig_mileage = px.scatter(dealer_df, x="Mileage_numeric", y="Price_numeric",
-                                         color="Make" if "Make" in dealer_df.columns else None,
-                                         hover_data=["Model","Year"] if "Model" in dealer_df.columns and "Year" in dealer_df.columns else None,
-                                         title="Mileage vs Price")
+                fig_mileage = px.scatter(
+                    dealer_df,
+                    x="Mileage_numeric",
+                    y="Price_numeric",
+                    color="Make" if "Make" in dealer_df.columns else None,
+                    hover_data=["Model","Year"] if "Model" in dealer_df.columns and "Year" in dealer_df.columns else None,
+                    title="Mileage vs Price"
+                )
                 st.plotly_chart(fig_mileage, use_container_width=True)
                 st.info(f"💡 AI Insight: {chart_ai_suggestion('Mileage vs Price', dealer_df.head(10).to_dict(orient='records'))}")
 
@@ -367,17 +382,38 @@ Provide 1 concise insight specifically about {chart_name} and 1 actionable sugge
         except Exception as e:
             st.error(f"⚠️ Error loading dealer CSV: {e}")
 
-    # --- 5 Demo Dashboards at Bottom ---
+
+    # --------------------------
+    # 5 DEMO DASHBOARDS AT BOTTOM
+    # --------------------------
+
+    # Define demo dashboards
+    demo_dashboards = [
+        {
+            "top_recs": [
+                {"Make": "BMW", "Model": "X5", "Year": 2021, "Score": 92},
+                {"Make": "Audi", "Model": "Q7", "Year": 2020, "Score": 88},
+                {"Make": "Mercedes", "Model": "GLE", "Year": 2022, "Score": 90},
+            ],
+            "social": [
+                {"Instagram Likes": random.randint(200,500), "Facebook Likes": random.randint(150,450), "Twitter Retweets": random.randint(50,150), "Website Clicks": random.randint(300,600), "Leads": random.randint(10,25)}
+                for _ in range(4)
+            ],
+            "inventory": [
+                {"Make":"BMW", "Average Price":48000},
+                {"Make":"Audi", "Average Price":47000},
+                {"Make":"Mercedes", "Average Price":52000},
+            ]
+        }
+    ] * 5  # multiply to create 5 demo dashboards
+
     if show_demo_charts:
         st.markdown("---")
         st.markdown("### 🎨 Demo Dashboards for Reference")
-        demo_data = demo_data[:5]  # keep 5 demo dashboards
 
-        def get_car_image_url(make):
-            text = str(make).split()[0].upper() + "%20CAR"
-            return f"https://placehold.co/600x400/31363F/F0F7FF?text={text}"
+        for i, data in enumerate(demo_dashboards, start=1):
 
-        for i, data in enumerate(demo_data, start=1):
+            # FILTER BY MAKE / MODEL
             df_top = pd.DataFrame(data["top_recs"])
             if selected_make != "All" and selected_make not in df_top["Make"].values:
                 continue
@@ -391,7 +427,11 @@ Provide 1 concise insight specifically about {chart_name} and 1 actionable sugge
             st.plotly_chart(fig_top, use_container_width=True)
             st.info(f"💡 AI Insight: {chart_ai_suggestion(f'Demo Top Recommendations {i}', df_top.head(3).to_dict(orient='records'))}")
 
-            # Sample Images
+            # Car images
+            def get_car_image_url(make):
+                text = str(make).split()[0].upper() + "%20CAR"
+                return f"https://placehold.co/600x400/31363F/F0F7FF?text={text}"
+
             st.markdown("**🚗 Sample Car Images**")
             cols = st.columns(3)
             for idx, row in df_top.iterrows():
@@ -402,60 +442,51 @@ Provide 1 concise insight specifically about {chart_name} and 1 actionable sugge
             # --- Social Charts ---
             df_social = pd.DataFrame(data["social"])
             df_social["Week"] = ["Week 1","Week 2","Week 3","Week 4"]
+
             st.markdown("#### 📈 Social Engagement")
             fig_social_line = px.line(df_social, x="Week", y=["Instagram Likes","Facebook Likes","Twitter Retweets"], markers=True, title=f"Social Engagement Demo {i}")
             st.plotly_chart(fig_social_line, use_container_width=True)
+
             fig_clicks = px.bar(df_social, x="Week", y=["Website Clicks","Leads"], barmode="group", text_auto=True, title=f"Website Clicks & Leads Demo {i}")
             st.plotly_chart(fig_clicks, use_container_width=True)
+
             last_week = df_social.iloc[-1]
-            fig_pie = px.pie(names=["Instagram Likes","Facebook Likes","Twitter Retweets"],
-                             values=[last_week["Instagram Likes"], last_week["Facebook Likes"], last_week["Twitter Retweets"]],
-                             title=f"Last Week Platform Engagement Demo {i}")
+            fig_pie = px.pie(
+                names=["Instagram Likes","Facebook Likes","Twitter Retweets"],
+                values=[last_week["Instagram Likes"], last_week["Facebook Likes"], last_week["Twitter Retweets"]],
+                title=f"Last Week Platform Engagement Demo {i}"
+            )
             st.plotly_chart(fig_pie, use_container_width=True)
 
             # --- Inventory ---
             df_inv = pd.DataFrame(data["inventory"])
             st.markdown("**Inventory Summary**")
             st.table(df_inv)
+
             st.markdown("**🚘 Inventory Images**")
             inv_cols = st.columns(len(df_inv))
             for idx, row in df_inv.iterrows():
                 img_url = get_car_image_url(row["Make"])
                 col = inv_cols[idx % len(inv_cols)]
                 col.image(img_url, caption=f"{row['Make']} - £{row['Average Price']:,}", use_container_width=True)
+
             st.info(f"💡 AI Insight: {chart_ai_suggestion(f'Demo Inventory {i}', df_inv.head(3).to_dict(orient='records'))}")
 
-            # --- AI Video Script ---
+            # --- Video Script ---
             st.markdown("### 🎬 AI Video Script Generator")
             sample_listing = df_top.iloc[0]
             demo_script = (
                 f"Introducing the {sample_listing['Year']} {sample_listing['Make']} {sample_listing['Model']}!\n"
-                "Luxury and performance combined. ✅ High-quality interiors, sleek design, and powerful engine.\n"
-                "Perfect for family trips or city driving. 🚗💨\n"
-                "Contact us now to book a test drive!"
+                "Luxury and performance combined. Perfect for family trips or city driving. 🚗💨"
             )
             st.text_area(f"🎬 Demo Video Script {i}", demo_script, height=150, key=f"demo_script_{i}")
-            st.download_button(f"⬇ Download Demo Script {i}", demo_script, file_name=f"{sample_listing['Make']}_{sample_listing['Model']}_demo_script_{i}.txt", key=f"download_demo_script_{i}")
 
-            # --- Competitor Monitoring ---
-            st.markdown("### 🏁 Competitor Monitoring (Demo)")
-            demo_competitors = pd.DataFrame([
-                {"Competitor":"AutoHub","Make":"BMW","Model":"X5","Price":random.randint(47000,50000),"Location":"London"},
-                {"Competitor":"CarMax","Make":"Audi","Model":"Q7","Price":random.randint(46000,49000),"Location":"Manchester"},
-                {"Competitor":"MotorWorld","Make":"Mercedes","Model":"GLE","Price":random.randint(53000,56000),"Location":"Birmingham"}
-            ])
-            st.dataframe(demo_competitors)
-            st.download_button(f"⬇ Download Competitor Data {i}", demo_competitors.to_csv(index=False), file_name=f"competitor_demo_data_{i}.csv", key=f"download_competitor_{i}")
-
-            # --- Weekly Content Calendar ---
-            st.markdown("### 📅 Weekly Content Calendar (Demo)")
-            demo_calendar = pd.DataFrame({
-                "Day":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
-                "Content":[random.choice(["Listing Highlight","Social Post","Video Script","Tips & Tricks","Wrap Up"]) for _ in range(7)],
-                "Platform":[random.choice(["Instagram","Facebook","LinkedIn"]) for _ in range(7)]
-            })
-            st.dataframe(demo_calendar)
-            st.download_button(f"⬇ Download Weekly Content Calendar {i}", demo_calendar.to_csv(index=False), file_name=f"weekly_content_calendar_demo_{i}.csv", key=f"download_calendar_{i}")
+            st.download_button(
+                f"⬇ Download Demo Script {i}",
+                demo_script,
+                file_name=f"{sample_listing['Make']}_{sample_listing['Model']}_demo_script_{i}.txt",
+                key=f"download_demo_script_{i}"
+            )
 
             st.markdown("---")
 
