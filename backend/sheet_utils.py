@@ -203,6 +203,17 @@ def api_save_custom_report(email, config):
         return False, str(e)
 
 # -----------------------
+# Legacy / compatibility function
+# -----------------------
+def get_user_activity_data(email=None):
+    """
+    Returns a DataFrame of user activity.
+    Wrapper for get_listing_history_df for backward compatibility.
+    """
+    return get_listing_history_df(email=email)
+
+
+# -----------------------
 # Small helper for debugging
 # -----------------------
 if __name__ == "__main__":
