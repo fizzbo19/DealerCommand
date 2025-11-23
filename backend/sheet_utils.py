@@ -13,7 +13,7 @@ APPS_SCRIPT_URL = os.environ.get(
 TIMEOUT = 15
 
 # -----------------------
-# Core function to call Apps Script
+# CORE SCRIPT CALL
 # -----------------------
 def call_script(payload, method="POST"):
     """Call the Apps Script web app (POST preferred)."""
@@ -29,15 +29,10 @@ def call_script(payload, method="POST"):
         return {"success": False, "error": str(e)}
 
 # -----------------------
-# Basic DB functions (JSON storage)
+# BASIC DB FUNCTIONS
 # -----------------------
 def save_record(record_type, email, data, record_id=None):
-    payload = {
-        "action": "append",
-        "record_type": record_type,
-        "email": email,
-        "data": data
-    }
+    payload = {"action": "append", "record_type": record_type, "email": email, "data": data}
     if record_id:
         payload["id"] = record_id
     res = call_script(payload)
@@ -47,19 +42,27 @@ def upsert_record(record_id, record_type, email, data):
     payload = {"action": "upsert", "id": record_id, "record_type": record_type, "email": email, "data": data}
     return call_script(payload)
 
-# -----------------------
-# Backward compatibility wrappers
-# -----------------------
-def upsert_to_sheet(record_id, record_type, email, data):
-    """Wrapper for backward compatibility with frontend/trial_manager."""
-    return upsert_record(record_id, record_type, email, data)
+def get_records(record_type=None, email=None, limit=None, since=None):
+    payload = {"action": "get_records"}
+    if record_type: payload["record_type"] = record_type
+    if email: payload["email"] = email
+    if limit: payload["limit"] = limit
+    if since: payload["since"] = since
+    res = call_script(payload)
+    if not res.get("success"):
+        return []
+    return res.get("data", [])
 
-def get_user_activity_data(email=None):
-    """Legacy wrapper for trial_manager."""
-    return get_listing_history_df(email=email)
+def query_records(filters=None, record_type=None, email=None, limit=None):
+    payload = {"action": "query"}
+    if filters: payload["filters"] = filters
+    if record_type: payload["record_type"] = record_type
+    if email: payload["email"] = email
+    if limit: payload["limit"] = limit
+    return call_script(payload)
 
 # -----------------------
-# Frontend helpers
+# BACKWARDS-COMPAT HELPERS
 # -----------------------
 def append_to_google_sheet(sheet_name, data_dict):
     try:
@@ -71,6 +74,21 @@ def append_to_google_sheet(sheet_name, data_dict):
         print("append_to_google_sheet error:", e)
         return False
 
+def upsert_to_sheet(sheet_name, key_col="Email", data_dict=None):
+    """Add or update a record in a sheet by key_col"""
+    if data_dict is None:
+        return False
+    key_value = data_dict.get(key_col)
+    if not key_value:
+        return False
+    # Check for existing record
+    df = get_sheet_data(sheet_name)
+    existing = df[df[key_col].astype(str).str.lower() == str(key_value).lower()]
+    record_id = existing.iloc[0]["ID"] if not existing.empty else None
+    return bool(
+        upsert_record(record_id, sheet_name, key_value, data_dict).get("success", False)
+    )
+
 def get_sheet_data(sheet_name):
     try:
         raw = get_records(record_type=sheet_name)
@@ -78,14 +96,17 @@ def get_sheet_data(sheet_name):
             return pd.DataFrame()
         rows = []
         for r in raw:
-            try:
-                parsed = r.get("Data_JSON_parsed") if "Data_JSON_parsed" in r else json.loads(r.get("Data_JSON","{}"))
-            except Exception:
-                parsed = {}
-            out = {"ID": r.get("ID"), "Email": r.get("Email"), "Record_Type": r.get("Record_Type"),
-                   "Created_At": r.get("Created_At"), "Updated_At": r.get("Updated_At")}
+            parsed = r.get("Data_JSON_parsed") if "Data_JSON_parsed" in r else json.loads(r.get("Data_JSON", "{}"))
+            out = {
+                "ID": r.get("ID"),
+                "Email": r.get("Email"),
+                "Record_Type": r.get("Record_Type"),
+                "Created_At": r.get("Created_At"),
+                "Updated_At": r.get("Updated_At")
+            }
             if isinstance(parsed, dict):
-                out.update(parsed)
+                for k, v in parsed.items():
+                    out[k] = v
             else:
                 out["Data"] = parsed
             rows.append(out)
@@ -94,6 +115,9 @@ def get_sheet_data(sheet_name):
         print("get_sheet_data error:", e)
         return pd.DataFrame()
 
+# -----------------------
+# INVENTORY & LISTINGS
+# -----------------------
 def get_inventory_for_user(email):
     df = get_sheet_data("Inventory")
     if df.empty:
@@ -109,8 +133,22 @@ def get_listing_history_df(email=None):
         df = df[df["Email"].astype(str).str.lower() == email.lower()]
     return df
 
+def get_user_activity_data(email=None):
+    return get_listing_history_df(email=email)
+
 # -----------------------
-# API helper functions
+# DEALERSHIP PROFILE WRAPPERS
+# -----------------------
+def save_dealership_profile(email, profile):
+    """Save dealership profile using existing API helper"""
+    return api_save_dealership_profile(email, profile)
+
+def get_dealership_profile(email):
+    """Fetch dealership profile using existing API helper"""
+    return api_get_dealership_profile(email)
+
+# -----------------------
+# API HELPERS
 # -----------------------
 def api_save_inventory(email, item):
     try:
@@ -144,40 +182,9 @@ def api_get_dealership_profile(email):
         st.error(f"⚠️ API error fetching profile: {e}")
         return {}
 
-def api_increment_platinum_usage(email, count=1):
-    try:
-        resp = requests.post(f"{os.environ.get('BACKEND_URL')}/platinum/usage", json={"email": email, "count": count})
-        return resp.json().get("success", False)
-    except Exception as e:
-        st.error(f"⚠️ API error incrementing usage: {e}")
-        return False
-
-def api_save_custom_report(email, config):
-    try:
-        resp = requests.post(f"{os.environ.get('BACKEND_URL')}/custom/report", json={"email": email, "config": config})
-        return resp.json().get("success", False), resp.json().get("message", "")
-    except Exception as e:
-        return False, str(e)
-
 # -----------------------
-# Migration helper
-# -----------------------
-def migrate_sheet_tab(tab_name, email_field=None):
-    try:
-        payload = {"sheet": tab_name, "action": "raw_sheet"}
-        resp = call_script(payload, method="GET")
-        if not resp.get("success"):
-            return False, resp.get("error","unknown")
-        rows = resp.get("data",[])
-        for r in rows:
-            email = r.get(email_field) if email_field else (r.get("Email") or "")
-            save_record(record_type=tab_name, email=email, data=r)
-        return True, f"Migrated {len(rows)} rows from {tab_name}"
-    except Exception as e:
-        return False, str(e)
-
-# -----------------------
-# Debugging
+# DEBUG
 # -----------------------
 if __name__ == "__main__":
     print("sheet_utils loaded. APPS_SCRIPT_URL:", APPS_SCRIPT_URL)
+
