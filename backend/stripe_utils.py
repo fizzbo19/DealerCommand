@@ -102,6 +102,10 @@ def api_get_inventory(user_email):
     user_rows = df[df["Email"].astype(str).str.lower() == user_email.lower()]
     return user_rows.to_dict(orient="records")
 
+def get_user_inventory(user_email):
+    """Alias for old app.py compatibility"""
+    return api_get_inventory(user_email)
+
 def api_save_inventory(user_email, item_data):
     df = _load_inventory_df()
     inv_id = item_data.get("Inventory_ID")
