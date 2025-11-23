@@ -6,6 +6,7 @@ import pandas as pd
 from datetime import datetime
 import streamlit as st
 
+
 # Set your Apps Script Web App URL in env or here:
 APPS_SCRIPT_URL = os.environ.get(
     "APPS_SCRIPT_URL"
@@ -216,6 +217,65 @@ def load_custom_reports(email):
 def apply_report_filters(df, filters):
     """Placeholder to filter DataFrame"""
     return df
+
+# --------------------------
+# INVENTORY API HELPERS
+# --------------------------
+
+def api_get_inventory(email: str):
+    """
+    Returns all inventory rows for a dealership based on email.
+    Assumes sheet 'Inventory' contains a column 'Email' linking items.
+    """
+    df = get_sheet_data("Inventory")
+    if df.empty:
+        return []
+
+    df["Email_lower"] = df["Email"].astype(str).str.lower()
+    data = df[df["Email_lower"] == email.lower()]
+
+    # Convert dataframe rows to dicts
+    return data.drop(columns=["Email_lower"], errors="ignore").to_dict(orient="records")
+
+
+def api_upsert_inventory(email: str, item: dict):
+    """
+    Inserts or updates an inventory row. Must contain 'Listing_ID'.
+    """
+    if "Listing_ID" not in item:
+        raise ValueError("Inventory item must include Listing_ID")
+
+    upsert_to_sheet(
+        "Inventory",
+        key_col="Listing_ID",
+        data_dict={**item, "Email": email}
+    )
+    return True
+
+
+def api_delete_inventory(listing_id: str):
+    """
+    Deletes an inventory listing by setting a 'Deleted' flag.
+    """
+    upsert_to_sheet(
+        "Inventory",
+        key_col="Listing_ID",
+        data_dict={"Listing_ID": listing_id, "Deleted": "YES"}
+    )
+    return True
+
+
+# --------------------------
+# SAVE INVENTORY (alias)
+# --------------------------
+
+def api_save_inventory(email: str, item: dict):
+    """
+    Compatibility wrapper for older code.
+    Same as api_upsert_inventory().
+    """
+    return api_upsert_inventory(email, item)
+
 
 
 # -----------------------

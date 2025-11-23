@@ -43,7 +43,7 @@ from backend.sheet_utils import (
     get_inventory_for_user
 )
 from backend.plan_utils import has_feature
-from backend.stripe_utils import create_checkout_session
+from backend.stripe_utils import create_checkout_session, api_get_inventory
 from backend.analytics import analytics_dashboard, generate_demo_data
 from backend.platinum_manager import (
     is_platinum,
