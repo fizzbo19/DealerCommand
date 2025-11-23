@@ -4,9 +4,9 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 from datetime import datetime
-from io import BytesIO
 
 from backend.analytics import get_user_analytics_data, platinum_recommendations
+from backend.trial_manager import ensure_user_and_get_status
 
 # -----------------------------
 # Helpers
@@ -39,25 +39,60 @@ def load_demo_data():
 def df_to_csv_bytes(df):
     return df.to_csv(index=False).encode("utf-8")
 
-def fig_to_png(fig):
-    # Requires python package 'kaleido'
-    try:
-        return fig.to_image(format="png")
-    except Exception:
-        return None
+def get_filtered_data(df, make, model, platform, date_range):
+    filtered = df.copy()
+    if make != "All":
+        filtered = filtered[filtered["Make"] == make]
+    if model != "All":
+        filtered = filtered[filtered["Model"] == model]
+    if platform != "All":
+        filtered = filtered[filtered["Platform"] == platform]
+    if date_range:
+        start_dt, end_dt = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
+        filtered = filtered[(filtered["Date"] >= start_dt) & (filtered["Date"] <= end_dt)]
+    return filtered
+
+def calculate_kpis(df):
+    if df.empty:
+        return {"total_revenue":0, "avg_price":0, "total_listings":0, "avg_reach":0}
+    return {
+        "total_revenue": int(df["Revenue"].sum()),
+        "avg_price": int(df["Price"].mean()),
+        "total_listings": len(df),
+        "avg_reach": int(df["Reach"].mean()) if "Reach" in df.columns else 0
+    }
+
+def plot_revenue_charts(df):
+    rev_df = df.groupby(pd.Grouper(key="Date", freq="M"))["Revenue"].sum().reset_index()
+    if rev_df.empty:
+        return None, None
+    rev_fig = px.line(rev_df, x="Date", y="Revenue", title="Revenue Over Time (Monthly)")
+    rev_df["Cumulative"] = rev_df["Revenue"].cumsum()
+    cum_fig = px.area(rev_df, x="Date", y="Cumulative", title="Cumulative Revenue")
+    return rev_fig, cum_fig
 
 # -----------------------------
-# Main function (callable)
+# Main function
 # -----------------------------
-def show_analytics_dashboard(user_email, user_plan):
+def show_analytics_dashboard(user_email):
     st.set_page_config(page_title="Analytics Dashboard | DealerCommand", layout="wide")
     st.title("📊 DealerCommand Analytics")
 
-    analytics_df, use_demo_auto = get_user_analytics_data(user_email, user_plan.lower())
+    # -----------------------------
+    # Determine trial / plan status
+    # -----------------------------
+    status, expiry, _, _, plan = ensure_user_and_get_status(user_email)
+    is_trial_active = status == "active" and plan.lower() == "free trial"
+    effective_plan = "platinum" if is_trial_active else plan.lower()
 
-    # Demo toggle for platinum only
+    # -----------------------------
+    # Fetch analytics
+    # -----------------------------
+    analytics_df, use_demo_auto = get_user_analytics_data(user_email, effective_plan)
+
+    # Demo mode logic
     demo_mode = False
-    if user_plan.lower() == "platinum":
+    if effective_plan == "platinum":
         demo_mode = st.checkbox("🧪 Show Demo Analytics (Platinum)", value=use_demo_auto)
     else:
         demo_mode = use_demo_auto
@@ -66,15 +101,17 @@ def show_analytics_dashboard(user_email, user_plan):
         analytics_df = load_demo_data()
         show_demo_badge()
 
-    # Ensure types
-    if "Date" in analytics_df.columns:
-        analytics_df["Date"] = pd.to_datetime(analytics_df["Date"], errors="coerce")
-    if "Price" in analytics_df.columns:
-        analytics_df["Price"] = pd.to_numeric(analytics_df["Price"], errors="coerce").fillna(0)
-    if "Revenue" in analytics_df.columns:
-        analytics_df["Revenue"] = pd.to_numeric(analytics_df["Revenue"], errors="coerce").fillna(0)
+    # Ensure correct types
+    for col in ["Date", "Price", "Revenue"]:
+        if col in analytics_df.columns:
+            if col == "Date":
+                analytics_df[col] = pd.to_datetime(analytics_df[col], errors="coerce")
+            else:
+                analytics_df[col] = pd.to_numeric(analytics_df[col], errors="coerce").fillna(0)
 
+    # -----------------------------
     # Filters
+    # -----------------------------
     with st.expander("🔍 Filters"):
         makes = ["All"] + analytics_df["Make"].dropna().unique().tolist()
         selected_make = st.selectbox("Make", makes)
@@ -82,86 +119,69 @@ def show_analytics_dashboard(user_email, user_plan):
         selected_model = st.selectbox("Model", models)
         platforms = ["All"] + analytics_df["Platform"].dropna().unique().tolist()
         selected_platform = st.selectbox("Platform", platforms)
-        date_range = st.date_input("Date Range", [analytics_df["Date"].min().date(), analytics_df["Date"].max().date()]) if not analytics_df.empty else None
+        date_range = st.date_input(
+            "Date Range", 
+            [analytics_df["Date"].min().date(), analytics_df["Date"].max().date()]
+        ) if not analytics_df.empty else None
 
-    filtered = analytics_df.copy()
-    if selected_make != "All":
-        filtered = filtered[filtered["Make"] == selected_make]
-    if selected_model != "All":
-        filtered = filtered[filtered["Model"] == selected_model]
-    if selected_platform != "All":
-        filtered = filtered[filtered["Platform"] == selected_platform]
-    if date_range:
-        start_dt, end_dt = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
-        filtered = filtered[(filtered["Date"] >= start_dt) & (filtered["Date"] <= end_dt)]
+    filtered_df = get_filtered_data(analytics_df, selected_make, selected_model, selected_platform, date_range)
 
-    # Top-row KPIs
+    # -----------------------------
+    # KPIs
+    # -----------------------------
     st.subheader("📌 Key Metrics")
+    kpis = calculate_kpis(filtered_df)
     k0, k1, k2, k3 = st.columns(4)
-    total_revenue = int(filtered["Revenue"].sum()) if not filtered.empty else 0
-    avg_price = int(filtered["Price"].mean()) if not filtered.empty else 0
-    total_listings = len(filtered)
-    avg_reach = int(filtered["Reach"].mean()) if "Reach" in filtered.columns and not filtered.empty else 0
-    k0.metric("Total Revenue", f"£{total_revenue}")
-    k1.metric("Average Price", f"£{avg_price}")
-    k2.metric("Listings", f"{total_listings}")
-    k3.metric("Avg Reach", f"{avg_reach}")
+    k0.metric("Total Revenue", f"£{kpis['total_revenue']}")
+    k1.metric("Average Price", f"£{kpis['avg_price']}")
+    k2.metric("Listings", f"{kpis['total_listings']}")
+    k3.metric("Avg Reach", f"{kpis['avg_reach']}")
 
     # CSV export
-    csv_bytes = df_to_csv_bytes(filtered)
-    st.download_button("⬇ Download filtered data (CSV)", csv_bytes, file_name="analytics_filtered.csv", mime="text/csv")
+    st.download_button("⬇ Download filtered data (CSV)", df_to_csv_bytes(filtered_df),
+                       file_name="analytics_filtered.csv", mime="text/csv")
 
-    # -------------------------
-    # Charts area
-    # -------------------------
+    # -----------------------------
+    # Charts
+    # -----------------------------
     st.markdown("### Revenue & Listings")
     c1, c2 = st.columns([2,1])
-
-    # Revenue over time (monthly)
-    rev_df = filtered.groupby(pd.Grouper(key="Date", freq="M"))["Revenue"].sum().reset_index()
-    if rev_df.empty:
-        st.info("No data to display for selected filters.")
-    else:
-        fig_rev = px.line(rev_df, x="Date", y="Revenue", title="Revenue Over Time (Monthly)")
-        c1.plotly_chart(fig_rev, use_container_width=True)
-
-        # cumulative revenue
-        rev_df["Cumulative"] = rev_df["Revenue"].cumsum()
-        fig_cum = px.area(rev_df, x="Date", y="Cumulative", title="Cumulative Revenue")
-        c1.plotly_chart(fig_cum, use_container_width=True)
+    rev_fig, cum_fig = plot_revenue_charts(filtered_df)
+    if rev_fig:
+        c1.plotly_chart(rev_fig, use_container_width=True)
+        c1.plotly_chart(cum_fig, use_container_width=True)
+        try:
+            img = rev_fig.to_image(format="png")
+            st.download_button("⬇ Download Revenue chart (PNG)", img, file_name="revenue_chart.png", mime="image/png")
+        except Exception:
+            st.info("To download charts as PNG install 'kaleido'.")
 
     # Price distribution
-    if not filtered.empty and "Price" in filtered.columns:
-        fig_price = px.histogram(filtered, x="Price", nbins=20, title="Price Distribution")
+    if not filtered_df.empty and "Price" in filtered_df.columns:
+        fig_price = px.histogram(filtered_df, x="Price", nbins=20, title="Price Distribution")
         c2.plotly_chart(fig_price, use_container_width=True)
 
     # Platform performance
-    if "Platform" in filtered.columns:
+    if "Platform" in filtered_df.columns:
         st.markdown("### Platform Performance")
-        pf = filtered.groupby("Platform")[["Reach","Impressions","Revenue"]].sum().reset_index()
+        pf = filtered_df.groupby("Platform")[["Reach","Impressions","Revenue"]].sum().reset_index()
         fig_pf = px.bar(pf, x="Platform", y=["Reach","Impressions","Revenue"], barmode="group", title="Platform Comparison")
         st.plotly_chart(fig_pf, use_container_width=True)
 
     # Top models by revenue
     st.markdown("### Top Models")
-    if "Model" in filtered.columns:
-        top_models = filtered.groupby("Model")["Revenue"].sum().reset_index().sort_values("Revenue", ascending=False).head(10)
+    if "Model" in filtered_df.columns:
+        top_models = filtered_df.groupby("Model")["Revenue"].sum().reset_index().sort_values("Revenue", ascending=False).head(10)
         st.dataframe(top_models)
 
-    # Recommendations (Platinum)
-    if user_plan.lower() == "platinum":
+    # Platinum recommendations
+    if effective_plan == "platinum":
         st.markdown("### 💡 AI Recommendations")
-        recs = platinum_recommendations(filtered)
+        recs = platinum_recommendations(filtered_df)
         for r in recs:
             st.markdown(f"- {r}")
 
-    # Download a chart as PNG (best-effort)
-    try:
-        img = fig_rev.to_image(format="png")
-        st.download_button("⬇ Download Revenue chart (PNG)", img, file_name="revenue_chart.png", mime="image/png")
-    except Exception:
-        st.info("To download charts as PNG install 'kaleido' in your environment.")
+    # Footer notice for demo/trial
+    if demo_mode or is_trial_active:
+        st.info("⚠️ Demo data or trial Platinum access shown. Real analytics update when you add listings or your trial ends.")
 
-    # Footer demo notice
-    if demo_mode:
-        st.info("⚠️ Demo data shown. Real analytics update when you add listings.")

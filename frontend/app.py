@@ -208,6 +208,8 @@ main_tabs = st.tabs(["🧾 Generate Listing", "📊 Analytics Dashboard", "📈 
 with main_tabs[0]:
     if is_active and (remaining_listings > 0 or current_plan=="platinum"):
         st.markdown("### 🧾 Generate a New Listing")
+        
+        # Form definition moved inside the 'if' block to fix indentation issues
         with st.form("listing_form"):
             col1, col2 = st.columns(2)
             with col1:
@@ -224,6 +226,7 @@ with main_tabs[0]:
                 features = st.text_area("Key Features", "Panoramic roof, heated seats, M Sport package")
                 notes = st.text_area("Dealer Notes (optional)", "Full service history, finance available")
             submitted = st.form_submit_button("✨ Generate Listing")
+        
         if submitted:
             if not can_add_listing(user_email):
                 st.warning("⚠️ Listing limit reached. Upgrade to Platinum for unlimited.")
@@ -488,7 +491,7 @@ with main_tabs[1]:
                 st.table(dealer_df.head(10))
 
                 # Simple dealer charts
-                if "Make" in dealer_df.columns and "Price" in dealer_df.columns:
+                if "Price" in dealer_df.columns:
                     dealer_df["Price_numeric"] = pd.to_numeric(
                         dealer_df["Price"].replace('£', '', regex=True).replace(',', '', regex=True),
                         errors='coerce'
@@ -693,21 +696,23 @@ with main_tabs[2]:
         if df_inventory is None or df_inventory.empty:
             st.info("No inventory added yet.")
             st.stop()
+
         df_inventory.columns = [str(c).strip() for c in df_inventory.columns]
-        email_col = next((c for c in df_inventory.columns if c.lower()=="email"), None)
+        email_col = next((c for c in df_inventory.columns if c.lower() == "email"), None)
         if not email_col:
             st.error("⚠️ Inventory sheet missing an 'Email' column.")
             st.stop()
+
         df_inventory[email_col] = df_inventory[email_col].astype(str).str.lower()
-        filtered = df_inventory[df_inventory[email_col]==user_email.lower()]
+        filtered = df_inventory[df_inventory[email_col] == user_email.lower()]
         if filtered.empty:
             st.info("No listings for your account yet.")
             st.stop()
+
         for idx, row in filtered.iterrows():
             st.subheader(f"{row.get('Year','')} {row.get('Make','')} {row.get('Model','')}")
             if row.get("Image_Link"):
-                # Note: This image is uploaded to Drive, not a placeholder
-                st.image(row["Image_Link"], width=300) 
+                st.image(row["Image_Link"], width=300)
             details = {k: row.get(k,"-") for k in ["Mileage","Color","Fuel","Transmission","Price","Features","Notes"]}
             st.table(pd.DataFrame(details.items(), columns=["Attribute","Value"]))
             st.markdown("#### Listing Description")
