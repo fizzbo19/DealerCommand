@@ -21,24 +21,15 @@ sys.path.extend([BASE_DIR, BACKEND_DIR])
 # ---------------------------------------------------------
 from backend.trial_manager import (
     get_dealership_status,
-    check_listing_limit,
-    increment_usage,
     can_user_login
 )
-from backend.sheet_utils import append_to_google_sheet, get_sheet_data, get_inventory_for_user
-from backend.plan_utils import has_feature
-from backend.stripe_utils import create_checkout_session
-from backend.analytics import analytics_dashboard
+from backend.sheet_utils import append_to_google_sheet, get_sheet_data, get_inventory_for_user # Keep get_inventory_for_user
 from backend.platinum_manager import (
-    is_platinum,
     can_add_listing,
-    get_platinum_dashboard,
     increment_platinum_usage,
-    get_platinum_remaining_listings,
-    generate_ai_video_script,
-    competitor_monitoring,
-    generate_weekly_content_calendar
 )
+
+# NOTE: Removed unused imports like check_listing_limit, has_feature, create_checkout_session, etc., for cleanliness.
 
 # ---------------------------------------------------------
 # GOOGLE DRIVE SETUP
@@ -212,7 +203,7 @@ main_tabs = st.tabs(["🧾 Generate Listing", "📊 Analytics Dashboard", "📈 
 
 
 # ---------------------------------------------------------
-# HELPER FUNCTIONS (Moved here for clean execution)
+# HELPER FUNCTIONS (Including the missing get_user_inventory)
 # ---------------------------------------------------------
 
 def get_car_image_url(make):
@@ -223,6 +214,41 @@ def get_car_image_url(make):
     text = str(make).split()[0].upper() + "%20CAR"
     # Format: https://placehold.co/{width}x{height}/{background color}/{text color}?text={text}
     return f"https://placehold.co/600x400/31363F/F0F7FF?text={text}"
+
+
+def get_user_inventory(email):
+    """
+    Fetches user inventory from the sheet, cleans columns, and parses numeric/date types 
+    for dashboard readiness.
+    """
+    try:
+        # Use the imported function to fetch data
+        df = pd.DataFrame(get_inventory_for_user(email))
+        
+        if df.empty:
+            return pd.DataFrame(columns=["Make", "Model", "Year", "Price", "Mileage", "Timestamp"])
+        
+        df.columns = [str(c).strip() for c in df.columns]
+
+        # Standardize timestamp parsing
+        timestamp_col = next((c for c in df.columns if c.lower() in ["timestamp", "created", "created_at"]), None)
+        if timestamp_col:
+            df["Timestamp_parsed"] = pd.to_datetime(df[timestamp_col], errors="coerce")
+            df.dropna(subset=["Timestamp_parsed"], inplace=True)
+        else:
+            df["Timestamp_parsed"] = pd.Timestamp.utcnow() # Fallback
+
+        # Standardize numeric parsing
+        for num_col, chars in [("Price", ["£", ","]), ("Mileage", [" miles", ","])]:
+            if num_col in df.columns:
+                s = df[num_col].astype(str).str.strip()
+                for ch in chars:
+                    s = s.str.replace(ch, "", regex=False)
+                df[f"{num_col}_num"] = pd.to_numeric(s, errors='coerce')
+        return df
+    except Exception as e:
+        print(f"Error in get_user_inventory: {e}")
+        return pd.DataFrame()
 
 
 def weekly_monthly_reports(df):
@@ -281,8 +307,8 @@ def render_dashboard(df, title_prefix="Inventory"):
     # KPIs
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Cars", len(df))
-    col2.metric("Average Price", f"£{int(df['Price_num'].mean()):,}" if "Price_num" in df else "-")
-    col3.metric("Average Mileage", f"{int(df['Mileage_num'].mean()):,} miles" if "Mileage_num" in df else "-")
+    col2.metric("Average Price", f"£{int(df['Price_num'].mean()):,}" if "Price_num" in df.columns else "-")
+    col3.metric("Average Mileage", f"{int(df['Mileage_num'].mean()):,} miles" if "Mileage_num" in df.columns else "-")
 
     # Time-based reports
     weekly_df, monthly_df = weekly_monthly_reports(df)
@@ -303,6 +329,7 @@ def render_dashboard(df, title_prefix="Inventory"):
         make_counts.columns = ["Make","Count"]
         plotly_chart(make_counts, "pie", x="Make", y="Count", title=f"{title_prefix}: Inventory by Make")
 
+
 # ----------------
 # GENERATE LISTING
 # ----------------
@@ -310,7 +337,7 @@ with main_tabs[0]:
     if is_active and (remaining_listings > 0 or current_plan=="platinum"):
         st.markdown("### 🧾 Generate a New Listing")
         
-        # Form definition moved inside the 'if' block to fix indentation issues
+        # Form definition 
         with st.form("listing_form"):
             col1, col2 = st.columns(2)
             with col1:
@@ -344,7 +371,6 @@ Include emojis and SEO-rich phrasing.
                 st.text_area("Generated Listing", listing_text, height=250)
                 st.download_button("⬇ Download Listing", listing_text, file_name=f"{make}_{model}_listing.txt")
                 
-                # Using dummy ID since actual implementation uses api_save_inventory elsewhere
                 inventory_id = str(uuid.uuid4())
                 
                 image_link = upload_image_to_drive(car_image, f"{make}_{model}_{datetime.utcnow().isoformat()}.png") if car_image else ""
@@ -383,7 +409,7 @@ Include emojis and SEO-rich phrasing.
 with main_tabs[1]:
     st.markdown("### 📊 Analytics Dashboard")
 
-    # Filter widgets (kept for continuity with dashboard logic)
+    # Filter widgets 
     all_makes = ["All", "BMW", "Audi", "Mercedes", "Tesla", "Jaguar", "Land Rover", "Porsche"]
     all_models = ["All", "X5 M Sport", "Q7", "GLE", "Q8", "X6", "GLC", "GLE Coupe", "X3 M", "Q5", "Model X", "iX", "e-tron", "F-Pace", "Discovery", "X4", "Cayenne", "M3", "RS7", "C63 AMG", "S-Class", "7 Series", "A8"]
     
@@ -400,9 +426,7 @@ with main_tabs[1]:
         render_dashboard(df, title_prefix="Inventory")
         
     elif dashboard_type == "Demo Data":
-        # Generate a large, single demo set
-        seed = st.number_input("Demo Seed", value=42, step=1, key="demo_seed_input")
-        # NOTE: Using a simple demo data generator here, assuming backend.analytics isn't available
+        # NOTE: Simple demo data generator used here
         def generate_demo_data(seed=42):
             random.seed(seed)
             makes = ["BMW", "Audi", "Mercedes", "Tesla", "Porsche"]
@@ -420,7 +444,7 @@ with main_tabs[1]:
                 })
             return pd.DataFrame(data)
 
-        df = generate_demo_data(seed=seed)
+        df = generate_demo_data(seed=st.number_input("Demo Seed", value=42, step=1, key="demo_seed_input"))
         render_dashboard(df, title_prefix="Demo")
 
     elif dashboard_type == "Demo Dashboards":
@@ -428,21 +452,13 @@ with main_tabs[1]:
         
         # ----- Demo Data for 8 Dashboards (simplified) -----
         demo_data = [
-            # Dashboard 1 (BMW, Audi, Mercedes)
             {"top_recs": [{"Year": "2021", "Make": "BMW", "Model": "X5 M Sport", "Score": 88}]},
-            # Dashboard 2 (Audi, BMW, Mercedes)
             {"top_recs": [{"Year": "2022", "Make": "Audi", "Model": "Q8", "Score": 87}]},
-            # Dashboard 3 (Mercedes, BMW, Audi)
             {"top_recs": [{"Year": "2020", "Make": "Mercedes", "Model": "GLE Coupe", "Score": 85}]},
-            # Dashboard 4 (Tesla, BMW, Audi)
             {"top_recs": [{"Year": "2021", "Make": "Tesla", "Model": "Model X", "Score": 90}]},
-            # Dashboard 5 (Jaguar, Land Rover, BMW)
             {"top_recs": [{"Year": "2021", "Make": "Jaguar", "Model": "F-Pace", "Score": 82}]},
-            # Dashboard 6 (Porsche, Audi, Mercedes)
             {"top_recs": [{"Year": "2022", "Make": "Porsche", "Model": "Cayenne", "Score": 88}]},
-            # Dashboard 7 (BMW, Audi, Mercedes)
             {"top_recs": [{"Year": "2021", "Make": "BMW", "Model": "M3", "Score": 86}]},
-            # Dashboard 8 (Mercedes, BMW, Audi)
             {"top_recs": [{"Year": "2022", "Make": "Mercedes", "Model": "S-Class", "Score": 92}]}
         ]
         
