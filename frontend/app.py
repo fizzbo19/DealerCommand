@@ -5,11 +5,10 @@ import os
 # ---------------------------------------------------------
 # PATH SETUP
 # ---------------------------------------------------------
-# Add repo root and backend folder to sys.path for imports
+# Add the repo root to sys.path so 'backend' can be imported
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-BACKEND_DIR = os.path.join(BASE_DIR, "backend")
-sys.path.insert(0, BASE_DIR)
-sys.path.insert(0, BACKEND_DIR)
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
 # ---------------------------------------------------------
 # STANDARD LIBRARIES
