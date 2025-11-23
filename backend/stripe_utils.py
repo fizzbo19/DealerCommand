@@ -4,7 +4,6 @@ import json
 import pandas as pd
 import stripe
 import uuid
-inv_id = item_data.get("Inventory_ID") or str(uuid.uuid4())
 
 # ------------------------------------------------------------
 # STRIPE CONFIG
