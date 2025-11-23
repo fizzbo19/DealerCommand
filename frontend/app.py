@@ -360,6 +360,114 @@ with st.sidebar.expander("🧰 Custom Report Builder (Platinum)", expanded=False
                 st.error(f"⚠️ {msg}")
 
 # ----------------
+# Analytics helper functions for Streamlit (paste above MAIN TABS)
+# ----------------
+
+def _safe_parse_datetime(col):
+    """Safely parse a timestamp-like column to datetime (in-place)"""
+    try:
+        return pd.to_datetime(col, errors="coerce")
+    except Exception:
+        return col
+
+def plotly_chart_for_streamlit(chart_type, df, x=None, y=None, title=None, color=None, size=None, hover_data=None):
+    """
+    Unified helper for rendering Plotly charts in Streamlit.
+    - chart_type: 'line','bar','scatter','hist','pie','area','table'
+    - df: pandas DataFrame
+    - x,y: column names
+    - color: color column
+    - size: size column for scatter
+    - hover_data: list of columns to show in hover
+    """
+    try:
+        if chart_type == "line":
+            fig = px.line(df, x=x, y=y, color=color, markers=True, title=title)
+        elif chart_type == "bar":
+            fig = px.bar(df, x=x, y=y, color=color, title=title)
+        elif chart_type == "scatter":
+            fig = px.scatter(df, x=x, y=y, color=color, size=size, hover_data=hover_data, title=title)
+        elif chart_type == "hist":
+            fig = px.histogram(df, x=x, nbins=30, title=title)
+        elif chart_type == "pie":
+            fig = px.pie(df, names=x, values=y, title=title)
+        elif chart_type == "area":
+            fig = px.area(df, x=x, y=y, title=title)
+        elif chart_type == "table":
+            # small table representation
+            fig = None
+            st.table(df.head(100))
+            return
+        else:
+            st.write("Unsupported chart type.")
+            return
+
+        st.plotly_chart(fig, use_container_width=True)
+    except Exception as e:
+        st.error(f"Failed to render chart: {e}")
+
+def weekly_monthly_report_dfs(email, inventory_df=None):
+    """
+    Returns two DataFrames:
+      - weekly_counts: listings per week (week starting date, count)
+      - monthly_counts: listings per month (YYYY-MM, count)
+    Uses Inventory -> Timestamp column if available.
+    """
+    try:
+        if inventory_df is None:
+            inventory_df = get_sheet_data("Inventory") if 'get_sheet_data' in globals() else pd.DataFrame()
+        if inventory_df is None or inventory_df.empty:
+            return pd.DataFrame(), pd.DataFrame()
+
+        # attempt several timestamp columns
+        if "Timestamp" in inventory_df.columns:
+            inventory_df["Timestamp_parsed"] = _safe_parse_datetime(inventory_df["Timestamp"])
+        elif "Created_At" in inventory_df.columns:
+            inventory_df["Timestamp_parsed"] = _safe_parse_datetime(inventory_df["Created_At"])
+        else:
+            # fallback: try to create a synthetic timestamp if index or Created exists
+            inventory_df["Timestamp_parsed"] = pd.to_datetime(inventory_df.get("Timestamp", pd.NaT), errors="coerce")
+
+        df = inventory_df.dropna(subset=["Timestamp_parsed"]).copy()
+        if df.empty:
+            return pd.DataFrame(), pd.DataFrame()
+
+        df["Week"] = df["Timestamp_parsed"].dt.to_period("W").apply(lambda r: r.start_time.date())
+        df["Month"] = df["Timestamp_parsed"].dt.to_period("M").astype(str)
+
+        weekly_counts = df.groupby("Week").size().reset_index(name="Listings")
+        monthly_counts = df.groupby("Month").size().reset_index(name="Listings")
+
+        return weekly_counts, monthly_counts
+    except Exception as e:
+        st.error(f"Failed to build weekly/monthly reports: {e}")
+        return pd.DataFrame(), pd.DataFrame()
+
+def safe_get_inventory_for_user(email):
+    """Try the preferred inventory helper then fallback to sheet read."""
+    try:
+        df = get_inventory_for_user(email)
+        # if get_inventory_for_user returns DataFrame already - return
+        if isinstance(df, pd.DataFrame):
+            return df
+    except Exception:
+        pass
+    # fallback
+    try:
+        df_raw = get_sheet_data("Inventory")
+        if df_raw is None or df_raw.empty:
+            return pd.DataFrame()
+        df_raw.columns = [str(c).strip() for c in df_raw.columns]
+        email_col = next((c for c in df_raw.columns if str(c).strip().lower() == "email"), None)
+        if email_col:
+            return df_raw[df_raw[email_col].astype(str).str.lower() == email.lower()].copy()
+        # if no email column, return whole sheet
+        return df_raw.copy()
+    except Exception:
+        return pd.DataFrame()
+
+
+# ----------------
 # MAIN TABS
 # ----------------
 main_tabs = st.tabs(["🧾 Generate Listing", "📊 Analytics Dashboard", "📈 Inventory"])
@@ -419,19 +527,173 @@ Notes: {notes}.
                 st.success("✅ Listing saved to inventory!")
 
 # ----------------
-# ANALYTICS DASHBOARD
+# ANALYTICS DASHBOARD (REPLACEMENT)
 # ----------------
 with main_tabs[1]:
     st.markdown("### 📊 Analytics Dashboard")
-    try:
-        inventory_list = api_get_inventory(user_email)
-        if inventory_list:
-            df = pd.DataFrame(inventory_list)
-            analytics_dashboard(df)
-        else:
-            st.info("No inventory yet. Generate listings to see analytics.")
-    except Exception as e:
-        st.error(f"Failed to load analytics: {e}")
+    show_demo_charts = st.checkbox("🎨 Show Demo Dashboards (Reference)", value=True, key="show_demo_charts")
+
+    # Filter widgets
+    all_makes = ["All", "BMW", "Audi", "Mercedes", "Tesla", "Jaguar", "Land Rover", "Porsche"]
+    all_models = ["All", "X5 M Sport", "Q7", "GLE", "Q8", "X6", "GLC", "GLE Coupe", "X3 M", "Q5", "Model X", "iX", "e-tron", "F-Pace", "Discovery", "X4", "Cayenne", "M3", "RS7", "C63 AMG", "S-Class", "7 Series", "A8"]
+    filter_col1, filter_col2 = st.columns(2)
+    with filter_col1:
+        selected_make = st.selectbox("Filter by Make", all_makes)
+    with filter_col2:
+        selected_model = st.selectbox("Filter by Model", all_models)
+
+    dealer_csv = st.file_uploader("Upload CSV — generates a custom dashboard", type=["csv"], key="dealer_inventory_upload")
+
+    def chart_ai_suggestion(chart_name, sample_data):
+        try:
+            # small wrapper to call your existing analytics helper if available
+            prompt_sample = sample_data if isinstance(sample_data, str) else str(sample_data)
+            return openai_generate(f"You are an automotive analyst. Provide one concise insight about {chart_name} given sample: {prompt_sample}")
+        except Exception:
+            return ""
+
+    # Load source data (either uploaded CSV or inventory for user)
+    if dealer_csv is not None:
+        try:
+            dealer_df = pd.read_csv(dealer_csv)
+            st.success("✅ Dealer inventory CSV loaded. Generating custom dashboard...")
+        except Exception as e:
+            st.error(f"Failed to read uploaded CSV: {e}")
+            dealer_df = pd.DataFrame()
+    else:
+        # Use inventory from sheets/backend
+        dealer_df = safe_get_inventory_for_user(user_email)
+
+    # Normalize columns early
+    if dealer_df is None:
+        dealer_df = pd.DataFrame()
+    if not dealer_df.empty:
+        dealer_df.columns = [str(c).strip() for c in dealer_df.columns]
+
+    # Show KPIs
+    if not dealer_df.empty:
+        st.markdown("#### Dealer Inventory Summary")
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Total Cars", len(dealer_df))
+        try:
+            price_col = next((c for c in dealer_df.columns if str(c).strip().lower() == "price"), None)
+            if price_col:
+                price_nums = pd.to_numeric(dealer_df[price_col].astype(str).str.replace('£','', regex=False).str.replace(',','', regex=False), errors='coerce')
+                avg_price = int(price_nums.mean()) if not price_nums.dropna().empty else 0
+            else:
+                avg_price = 0
+        except Exception:
+            avg_price = 0
+        col2.metric("Average Price", f"£{avg_price:,}" if avg_price else "£0")
+        try:
+            mileage_col = next((c for c in dealer_df.columns if str(c).strip().lower() == "mileage"), None)
+            if mileage_col:
+                mileage_nums = pd.to_numeric(dealer_df[mileage_col].astype(str).str.replace(" miles","", regex=False).str.replace(',','', regex=False), errors='coerce')
+                avg_mileage = int(mileage_nums.mean()) if not mileage_nums.dropna().empty else 0
+            else:
+                avg_mileage = 0
+        except Exception:
+            avg_mileage = 0
+        col3.metric("Average Mileage", f"{avg_mileage:,} miles" if avg_mileage else "-")
+        try:
+            col4.metric("Most Common Make", dealer_df['Make'].mode()[0] if "Make" in dealer_df.columns and len(dealer_df)>0 else "-")
+        except Exception:
+            col4.metric("Most Common Make", "-")
+
+        st.markdown("---")
+
+        # Price distribution
+        if price_col:
+            try:
+                dealer_df["Price_numeric"] = pd.to_numeric(dealer_df[price_col].astype(str).str.replace('£','', regex=False).str.replace(',','', regex=False), errors='coerce')
+                plotly_chart_for_streamlit("hist", dealer_df, x="Price_numeric", title="Price Distribution")
+                insight = chart_ai_suggestion("Price Distribution", dealer_df.head(10).to_dict(orient='records'))
+                if insight:
+                    st.info(f"💡 AI Insight: {insight}")
+            except Exception as e:
+                st.warning(f"Price distribution error: {e}")
+
+        # Mileage vs Price scatter
+        if "Mileage" in dealer_df.columns and "Price_numeric" in dealer_df.columns:
+            try:
+                dealer_df["Mileage_numeric"] = pd.to_numeric(dealer_df["Mileage"].astype(str).str.replace(" miles","", regex=False).str.replace(',','', regex=False), errors='coerce')
+                plotly_chart_for_streamlit("scatter", dealer_df, x="Mileage_numeric", y="Price_numeric", color="Make", hover_data=["Model","Year"], title="Mileage vs Price")
+                insight = chart_ai_suggestion("Mileage vs Price", dealer_df.head(10).to_dict(orient='records'))
+                if insight:
+                    st.info(f"💡 AI Insight: {insight}")
+            except Exception as e:
+                st.warning(f"Mileage vs price error: {e}")
+
+        # Listings over time (weekly/monthly)
+        weekly_df, monthly_df = weekly_monthly_report_dfs(user_email, dealer_df)
+        if not weekly_df.empty:
+            plotly_chart_for_streamlit("line", weekly_df, x="Week", y="Listings", title="Listings Per Week")
+        if not monthly_df.empty:
+            plotly_chart_for_streamlit("bar", monthly_df, x="Month", y="Listings", title="Listings Per Month")
+
+        # Top Makes pie
+        if "Make" in dealer_df.columns:
+            try:
+                make_counts = dealer_df['Make'].value_counts().reset_index()
+                make_counts.columns = ["Make","Count"]
+                plotly_chart_for_streamlit("pie", make_counts, x="Make", y="Count", title="Inventory by Make")
+            except Exception as e:
+                st.warning(f"Top makes error: {e}")
+
+        # Export cleaned CSV
+        try:
+            csv_bytes = dealer_df.to_csv(index=False).encode("utf-8")
+            st.download_button("⬇ Download cleaned inventory CSV", csv_bytes, file_name="dealer_inventory_cleaned.csv", mime="text/csv")
+        except Exception:
+            pass
+
+        # Small table preview
+        st.markdown("#### Sample Inventory Rows")
+        st.dataframe(dealer_df.head(50))
+
+    else:
+        st.info("No inventory data available. Upload a CSV or add listings to your inventory.")
+
+    # --------------------------
+    # 5 Demo Dashboards (kept at bottom)
+    # --------------------------
+    if show_demo_charts:
+        st.markdown("---")
+        st.markdown("### 🎨 Demo Dashboards for Reference (5 examples)")
+        try:
+            demo_list = generate_demo_data() if callable(generate_demo_data) else []
+            # If generate_demo_data returns a dict of demo frames (inventory/social), show simple examples
+            if isinstance(demo_list, dict):
+                demo_inv = demo_list.get("inventory")
+                demo_social = demo_list.get("social")
+                if isinstance(demo_inv, pd.DataFrame):
+                    plotly_chart_for_streamlit("bar", demo_inv.assign(idx=range(len(demo_inv))), x="idx", y=demo_inv.columns[0] if len(demo_inv.columns)>0 else None, title="Demo Inventory Snapshot")
+                if isinstance(demo_social, pd.DataFrame):
+                    plotly_chart_for_streamlit("line", demo_social, x="Date", y="Views", title="Demo Social Views")
+            else:
+                # fallback static demo rendering from earlier code (keeps original UI)
+                for i, data in enumerate([demo1, demo2, demo3, demo4, demo5], start=1):
+                    st.markdown(f"## Demo Dashboard {i}")
+                    df_top = pd.DataFrame(data["top_recs"])
+                    fig_top = px.bar(df_top, x="Model", y="Score", color="Make", text="Score", title=f"Top Recommendations Demo {i}")
+                    st.plotly_chart(fig_top, use_container_width=True)
+                    social = data["social"]
+                    if all(isinstance(v, list) for v in social.values()):
+                        df_social = pd.DataFrame(social)
+                        df_social["Week"] = [f"Week {k+1}" for k in range(len(df_social))]
+                        y_cols = [c for c in df_social.columns if c != "Week"]
+                        fig_social = px.line(df_social, x="Week", y=y_cols, markers=True, title=f"Social Trends Demo {i}")
+                        st.plotly_chart(fig_social, use_container_width=True)
+                    else:
+                        st.table(pd.DataFrame([social]))
+                    st.markdown("**Inventory Summary**")
+                    df_inv = pd.DataFrame(data["inventory"])
+                    st.table(df_inv)
+                    st.markdown("---")
+        except Exception:
+            # If any error occurs while rendering demo, fall back to old ui
+            pass
+
 
 # ----------------
 # INVENTORY VIEW
