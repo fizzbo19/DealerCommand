@@ -11,6 +11,7 @@ from backend.sheet_utils import (
 )
 from openai import OpenAI
 import os
+import json
 import random
 
 # ----------------------
@@ -45,8 +46,8 @@ def increment_platinum_usage(email, count=1):
 # ----------------------
 def generate_demo_inventory(top_n=5):
     np.random.seed(42)
-    makes = ["BMW", "Audi", "Mercedes", "Toyota"]
-    models = ["X5", "A3", "C-Class", "Corolla"]
+    makes = ["BMW", "Audi", "Mercedes", "Toyota", "Land Rover"]
+    models = ["X5", "A3", "C-Class", "Corolla", "Discovery"]
     colors = ["Red", "Blue", "Black", "White"]
     demo_listings = []
     for i in range(top_n):
@@ -202,3 +203,68 @@ def generate_weekly_content_calendar(email, top_n=5, demo_mode=False):
 
     df_calendar = pd.DataFrame(calendar_rows)
     return df_calendar, f"Weekly content calendar generated with {len(df_calendar)} posts."
+
+# ----------------------
+# CUSTOM REPORT BUILDER SUPPORT
+# ----------------------
+def save_custom_report(email, report_config):
+    """
+    Saves a custom report configuration to the "Reports" sheet.
+    report_config: dict with keys ["chart_type","x_axis","y_axis","filters","name"]
+    """
+    try:
+        record = {
+            "Email": email,
+            "Name": report_config.get("name", f"report-{random.randint(1000,9999)}"),
+            "Config": json.dumps(report_config),
+            "Created_At": datetime.utcnow().isoformat()
+        }
+        append_to_google_sheet("Reports", record)
+        return True, "Report saved successfully."
+    except Exception as e:
+        return False, f"Error saving report: {e}"
+
+def load_custom_reports(email):
+    """
+    Loads all saved custom reports for the given dealer email.
+    Returns list of dicts with 'name' and 'config'.
+    """
+    try:
+        df = get_sheet_data("Reports")
+        if df is None or df.empty:
+            return []
+        df.columns = [str(c).strip() for c in df.columns]
+        reports = df[df["Email"].str.lower() == email.lower()]
+        result = []
+        for _, row in reports.iterrows():
+            try:
+                config = json.loads(row.get("Config","{}"))
+                result.append({"name": row.get("Name","Unnamed Report"), "config": config})
+            except Exception:
+                continue
+        return result
+    except Exception:
+        return []
+
+def apply_report_filters(inventory_df, filters):
+    """
+    Applies saved report filters (dict) to inventory DataFrame.
+    Example filter: {"Make":["BMW","Audi"], "Year":{"min":2018,"max":2023}}
+    """
+    df = inventory_df.copy()
+    try:
+        for k,v in filters.items():
+            if k not in df.columns:
+                continue
+            if isinstance(v, dict):
+                if "min" in v:
+                    df = df[df[k] >= v["min"]]
+                if "max" in v:
+                    df = df[df[k] <= v["max"]]
+            elif isinstance(v, list):
+                df = df[df[k].isin(v)]
+            else:
+                df = df[df[k] == v]
+        return df
+    except Exception:
+        return df
