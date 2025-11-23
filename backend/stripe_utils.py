@@ -1,40 +1,40 @@
 # backend/stripe_utils.py
 import os
+import json
+import pandas as pd
 import stripe
+import uuid
+inv_id = item_data.get("Inventory_ID") or str(uuid.uuid4())
 
-# --------------------------
-# ENVIRONMENT VARIABLES
-# --------------------------
+# ------------------------------------------------------------
+# STRIPE CONFIG
+# ------------------------------------------------------------
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
-STRIPE_PREMIUM_PRICE_ID = os.environ.get("STRIPE_PREMIUM_PRICE_ID")  # £29.99/month
-STRIPE_PRO_PRICE_ID = os.environ.get("STRIPE_PRO_PRICE_ID")          # £59.99/month
-STRIPE_PLATINUM_PRICE_ID = os.environ.get("STRIPE_PLATINUM_PRICE_ID")  # £119.99/month
+STRIPE_PREMIUM_PRICE_ID = os.environ.get("STRIPE_PREMIUM_PRICE_ID")
+STRIPE_PRO_PRICE_ID = os.environ.get("STRIPE_PRO_PRICE_ID")
+STRIPE_PLATINUM_PRICE_ID = os.environ.get("STRIPE_PLATINUM_PRICE_ID")
+
 STRIPE_SUCCESS_URL = os.environ.get("STRIPE_SUCCESS_URL", "https://dealercommand.tech/success")
-STRIPE_CANCEL_URL = os.environ.get("STRIPE_CANCEL_URL", "https://dealercommand.tech/cancel")
+STRIPE_CANCEL_URL  = os.environ.get("STRIPE_CANCEL_URL",  "https://dealercommand.tech/cancel")
 
 stripe.api_key = STRIPE_SECRET_KEY
 
-# Mapping plans to Price IDs
 PLAN_PRICE_IDS = {
     "premium": STRIPE_PREMIUM_PRICE_ID,
-    "pro": STRIPE_PRO_PRICE_ID
+    "pro": STRIPE_PRO_PRICE_ID,
+    "platinum": STRIPE_PLATINUM_PRICE_ID
 }
 
-# --------------------------
-# CREATE CHECKOUT SESSION
-# --------------------------
+# ------------------------------------------------------------
+# STRIPE CHECKOUT SESSION
+# ------------------------------------------------------------
 def create_checkout_session(user_email, plan="premium"):
-    """
-    Create a Stripe Checkout session for a user based on selected plan.
-    Supported plans: 'premium', 'pro'
-    """
+    """Creates a Stripe checkout session."""
     if not STRIPE_SECRET_KEY:
-        print("❌ STRIPE_SECRET_KEY not set in environment.")
         return None
 
     price_id = PLAN_PRICE_IDS.get(plan.lower())
     if not price_id:
-        print(f"⚠️ Price ID for plan '{plan}' not found. Check environment variables.")
         return None
 
     try:
@@ -51,17 +51,12 @@ def create_checkout_session(user_email, plan="premium"):
         return session.url
 
     except Exception as e:
-        print(f"⚠️ Stripe Checkout session creation failed: {e}")
+        print("Stripe error:", e)
         return None
 
-# --------------------------
-# RETRIEVE SUBSCRIPTION DETAILS
-# --------------------------
+
 def get_subscription_details(session_id):
-    """
-    Retrieves subscription details after checkout success.
-    Returns customer email, plan_id, and subscription status.
-    """
+    """Retrieve subscription details."""
     try:
         session = stripe.checkout.Session.retrieve(session_id)
         subscription = stripe.Subscription.retrieve(session.subscription)
@@ -74,5 +69,66 @@ def get_subscription_details(session_id):
         }
 
     except Exception as e:
-        print(f"⚠️ Failed to retrieve subscription details: {e}")
+        print("Subscription lookup failed:", e)
         return None
+
+
+# ===================================================================
+# INVENTORY STORAGE (CSV BACKED) — REQUIRED BY FRONTEND
+# ===================================================================
+INVENTORY_CSV = "/opt/render/project/src/backend/inventory_data.csv"
+
+def _load_inventory_df():
+    if not os.path.exists(INVENTORY_CSV):
+        df = pd.DataFrame(columns=[
+           
+    "Email", "Inventory_ID", "Make", "Model", "Year", "Price", "Mileage",
+    "Color", "Fuel", "Transmission", "Features", "Notes", "Generated_Listing", "Created", "Images"
+]
+
+        )
+        df.to_csv(INVENTORY_CSV, index=False)
+        return df
+
+    return pd.read_csv(INVENTORY_CSV)
+
+def _save_inventory_df(df):
+    df.to_csv(INVENTORY_CSV, index=False)
+
+# ------------------------------------------------------------
+# REQUIRED BY app.py
+# ------------------------------------------------------------
+def api_get_inventory(user_email):
+    df = _load_inventory_df()
+    user_rows = df[df["Email"].astype(str).str.lower() == user_email.lower()]
+    return user_rows.to_dict(orient="records")
+
+def api_save_inventory(user_email, item_data):
+    df = _load_inventory_df()
+    inv_id = item_data.get("Inventory_ID")
+
+    # Create new ID if needed
+    if not inv_id or pd.isna(inv_id):
+        inv_id = f"car_{len(df) + 1}"
+        item_data["Inventory_ID"] = inv_id
+
+    # Remove old record
+    df = df[df["Inventory_ID"] != inv_id]
+
+    # Add new / updated record
+    item_data["Email"] = user_email
+    df = pd.concat([df, pd.DataFrame([item_data])], ignore_index=True)
+
+    _save_inventory_df(df)
+    return {"status": "saved", "Inventory_ID": inv_id}
+
+def api_delete_inventory(user_email, inventory_id):
+    df = _load_inventory_df()
+
+    df = df[~(
+        (df["Email"].astype(str).str.lower() == user_email.lower()) &
+        (df["Inventory_ID"] == inventory_id)
+    )]
+
+    _save_inventory_df(df)
+    return {"status": "deleted", "Inventory_ID": inventory_id}
