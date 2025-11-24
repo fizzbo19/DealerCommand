@@ -345,69 +345,24 @@ def render_dashboard(df, title_prefix="Inventory", show_summary=False, filter_ma
         st.info(f"No data matches the selected filters for {title_prefix}.")
         return
     
-    # --- Inventory Age Calculation ---
+    # --- CRITICAL FIX: Initialize variables before conditional use ---
+    total_count = len(df_filtered) # Initialize total_count to the length of the filtered DF
     avg_days = 0
     stale_percent = 0
     stale_action_insight = "Inventory age data is unavailable."
     
+    # --- Inventory Age Calculation ---
     if "Days_On_Lot" in df_filtered.columns and not df_filtered["Days_On_Lot"].isnull().all():
         df_filtered = df_filtered[df_filtered["Days_On_Lot"] >= 0]
-        total_count = len(df_filtered)
+        total_count = len(df_filtered) # Re-evaluate total count after cleaning 
         
         if total_count > 0:
             avg_days = df_filtered['Days_On_Lot'].mean()
         
-            # FIX FOR ValueError: "bins must increase monotonically."
+            # FIX FOR ValueError: "bins must increase monotonically." (Logic remains the same as previously fixed)
             max_days = df_filtered['Days_On_Lot'].max()
             
             # Define bins: always include 0, 30, 60. Max bin depends on max_days to ensure monotonicity.
-            bins = [0, 30, 60]
-            labels = ['0-30 Days (Fast)', '31-60 Days (Normal)']
-
-            if max_days >= 90:
-                bins.append(90)
-                labels.append('61-90 Days (Warning)')
-                labels.append('>90 Days (Stale)')
-                final_bin = max_days + 1
-                
-            elif max_days > 60:
-                bins.append(90) # Temporarily extend the bin to capture all ages up to 90
-                labels.append('61-90 Days (Warning)')
-                # Add the final bin just above the max value
-                final_bin = max_days + 1 
-                
-                # If we have ages > 90 (which is unlikely given the 'if max_days >= 90' above), handle it.
-                # Since max_days < 90 here, we cap the highest label at the max days found.
-                if max_days > 90: # This should be handled by the first if-block, but as safety:
-                     bins.append(max_days + 1)
-                elif 60 < max_days <= 90:
-                    labels = labels[:2] + [f'61-{max_days} Days (Warning)']
-                    final_bin = max_days + 1
-                    bins.append(final_bin)
-            else:
-                 final_bin = max_days + 1
-            
-            # Simplify the bins list for robustness:
-            if 60 < max_days:
-                 bins = [0, 30, 60, 90]
-            elif 30 < max_days <= 60:
-                 bins = [0, 30, 60]
-            elif 0 < max_days <= 30:
-                 bins = [0, 30]
-            else:
-                 return # No data or max days 0
-
-            # Use predetermined cut points and let pandas handle the labels up to the max data point.
-            # We must only include bins that are strictly less than max_days.
-            clean_bins = sorted(list(set([0, 30, 60, 90] + [max_days + 1])))
-            clean_bins = [b for b in clean_bins if b < max_days + 1 and b > 0]
-            clean_bins = [0] + clean_bins + [max_days + 1]
-            clean_bins = sorted(list(set(clean_bins)))
-            
-            # Final robust bin definition using fixed thresholds:
-            fixed_thresholds = [0, 30, 60, 90, 1000000] # Use a massive number as the final bin for safety
-            
-            # Only use bins that make sense given the max data point
             bins = [0]
             if max_days >= 30: bins.append(30)
             if max_days >= 60: bins.append(60)
@@ -415,6 +370,7 @@ def render_dashboard(df, title_prefix="Inventory", show_summary=False, filter_ma
             bins.append(max_days + 1)
             bins = sorted(list(set(bins))) # Remove duplicates and sort
 
+            # Define labels based on the final, sorted, clean bins
             labels = [f'{bins[i]}-{bins[i+1]-1} Days' for i in range(len(bins)-1)]
             
             # Apply the cut
@@ -436,8 +392,7 @@ def render_dashboard(df, title_prefix="Inventory", show_summary=False, filter_ma
             else:
                  stale_action_insight = "Excellent inventory management with no units exceeding 90 days."
 
-    # The rest of the dashboard code relies on df_filtered, which is now protected from the monotonic error.
-    
+    # --- KPI Display (Now safe because total_count is guaranteed to have a value) ---
     st.markdown(f"### 📊 {title_prefix} Dashboard")
 
     # AI Summary for Platinum Users
@@ -454,10 +409,8 @@ Average Days on Lot: {int(avg_days)} days. Stale Inventory (>90 days): {stale_pe
 Top 3 Makes by Count: {df_filtered['Make'].value_counts().head(3).to_dict() if 'Make' in df_filtered.columns else 'N/A'}.
 Actionable Insight: {stale_action_insight}
 """
-            # Placeholder for actual OpenAI call (assuming time and retry fixed elsewhere)
-            # You would integrate your fixed openai_generate call here.
-            
-            ai_summary = "AI Summary Placeholder: This inventory is healthy, with low average days on lot. Focus promotions on the top-selling makes (BMW, Audi) to maximize turnover in the next 30 days."
+            # Use the fixed openai_generate function here
+            ai_summary = openai_generate(summary_prompt, model="gpt-4o-mini", temperature=0.6)
             st.info(ai_summary)
         else:
             st.warning("Cannot generate AI summary without valid price data.")
@@ -465,7 +418,7 @@ Actionable Insight: {stale_action_insight}
 
     # KPIs - Added Days on Lot and Stale Inventory
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Cars (Filtered)", total_count)
+    col1.metric("Total Cars (Filtered)", total_count) # Access is now safe
     col2.metric("Avg Days on Lot", f"{int(avg_days)} days")
     col3.metric("Average Price", f"£{int(df_filtered['Price_num'].mean()):,}" if "Price_num" in df_filtered.columns and not df_filtered['Price_num'].isnull().all() else "-")
     col4.metric("Stale Inventory (>90d)", f"{stale_percent:.1f}%")
@@ -475,9 +428,9 @@ Actionable Insight: {stale_action_insight}
         age_counts = df_filtered['Inventory_Age_Bucket'].value_counts().reset_index()
         age_counts.columns = ['Age_Bucket', 'Count']
         
-        # Define the desired order for presentation
-        presentation_order = [l for l in labels if l in age_counts['Age_Bucket'].unique()]
-        
+        # Re-derive the labels to be used for ordering from the dynamically created bins
+        presentation_order = df_filtered['Inventory_Age_Bucket'].cat.categories.tolist()
+
         # Order the categories correctly
         age_counts['Age_Bucket'] = pd.Categorical(age_counts['Age_Bucket'], categories=presentation_order, ordered=True)
         age_counts = age_counts.sort_values('Age_Bucket')
@@ -502,7 +455,6 @@ Actionable Insight: {stale_action_insight}
         make_counts = df_filtered["Make"].value_counts().reset_index()
         make_counts.columns = ["Make","Count"]
         plotly_chart(make_counts, "pie", x="Make", y="Count", title=f"{title_prefix}: Inventory by Make")
-
 def render_custom_report(df, chart_type, x_col, y_col, color_col, size_col, agg_func, title):
     """Dynamically aggregates and renders a custom chart from uploaded data."""
     
