@@ -23,11 +23,15 @@ from backend.trial_manager import (
     get_dealership_status,
     can_user_login
 )
-from backend.sheet_utils import append_to_google_sheet, get_sheet_data, get_inventory_for_user
+from backend.sheet_utils import append_to_google_sheet, get_sheet_data, get_inventory_for_user, save_dealership_profile
 from backend.platinum_manager import (
     can_add_listing,
     increment_platinum_usage,
+    generate_ai_video_script,
+    competitor_monitoring,
+    generate_weekly_content_calendar
 )
+from backend.stripe_utils import create_checkout_session 
 
 # ---------------------------------------------------------
 # GOOGLE DRIVE SETUP
@@ -161,8 +165,6 @@ if status == "new":
         dealer_location = st.text_input("Location / City")
         submitted = st.form_submit_button("Save Info")
         if submitted:
-            # save_dealership_profile handles UPSERT on Dealership_Profiles tab
-            from backend.sheet_utils import save_dealership_profile
             save_dealership_profile(user_email, {
                 "Name": dealer_name,
                 "Phone": dealer_phone,
@@ -172,7 +174,7 @@ if status == "new":
             st.success("✅ Dealership info saved!")
 
 # ---------------------------------------------------------
-# SIDEBAR
+# SIDEBAR (Updated for Stripe Integration)
 # ---------------------------------------------------------
 st.sidebar.markdown("### 💳 Upgrade Plans")
 plans = {
@@ -184,10 +186,22 @@ selected_upgrade = st.sidebar.selectbox("Upgrade to:", list(plans.keys()))
 st.sidebar.markdown("**Features:**")
 for f in plans[selected_upgrade]:
     st.sidebar.markdown(f"- {f}")
-if st.sidebar.button("Upgrade Plan"):
-    # This should trigger an update via backend logic, simplified here for demo
-    st.session_state['user_plan'] = selected_upgrade.lower()
-    st.sidebar.success(f"✅ Upgraded to {selected_upgrade} plan!")
+
+# The button logic is updated to create and redirect to Stripe checkout
+if st.sidebar.button(f"Upgrade to {selected_upgrade} Plan"):
+    with st.spinner(f"Initiating checkout for {selected_upgrade}..."):
+        checkout_url = create_checkout_session(user_email, selected_upgrade.lower())
+    
+    if checkout_url:
+        st.sidebar.success(f"Redirecting to Stripe for {selected_upgrade}...")
+        # Use Streamlit's new feature or a redirect meta tag for navigation
+        st.sidebar.link_button("➡️ Go to Secure Checkout", checkout_url, type="primary")
+        # Optional: auto-redirect via HTML meta tag (more reliable in some deployments)
+        st.markdown(f'<meta http-equiv="refresh" content="0; url={checkout_url}">', unsafe_allow_html=True)
+
+    else:
+        st.sidebar.error("❌ Failed to initiate Stripe session. Check backend/Stripe configuration.")
+
 
 st.sidebar.markdown("### 🎯 Trial Overview")
 st.sidebar.markdown(f"**👤 Email:** `{user_email}`")
@@ -692,10 +706,10 @@ with main_tabs[1]:
         
     elif dashboard_type == "Demo Dashboards":
         if is_platinum_user:
-            st.info("Showing Demo Dashboards (Platinum Feature - Includes AI Analysis).")
+            st.info("Showing Demo Dashboards (Platinum Feature - Includes AI Analysis and Premium Tools).")
             show_summary = True
         else:
-            st.info("Showing Demo Dashboards. Upgrade to Platinum for AI Summary features.")
+            st.info("Showing Demo Dashboards. Upgrade to Platinum for AI Summary and premium tools.")
             show_summary = False
 
         # NOTE: Simple demo data generator used here for consistency
@@ -712,6 +726,7 @@ with main_tabs[1]:
                     "Year": random.randint(2018, 2023),
                     "Price_num": random.randint(40000, 90000),
                     "Mileage_num": random.randint(5000, 50000),
+                    "Features": random.choice(["Nav, Heated Seats", "M Sport Pkg", "Panoramic Roof"]),
                     "Timestamp_parsed": datetime.utcnow() - timedelta(days=random.randint(1, 365))
                 })
             df = pd.DataFrame(data)
@@ -743,6 +758,39 @@ with main_tabs[1]:
                 filter_model=selected_model
             )
             
+            # --- PLATINUM FEATURE DEMO SHOWCASE ---
+            if is_platinum_user:
+                st.markdown("#### 🎬 Platinum Tools Showcase")
+                
+                sample_car = demo_df.iloc[0].to_dict()
+                sample_make = sample_car['Make']
+                sample_features = sample_car['Features']
+                
+                # The backend function generate_ai_video_script expects the full listing data dictionary
+                # sample_car contains all the necessary keys (Make, Model, Features, etc.)
+                ai_script = generate_ai_video_script(user_email, sample_car)
+                
+                # Competitor monitoring expects the make
+                comp_df = competitor_monitoring(user_email, sample_make, seed)
+                
+                content_calendar = generate_weekly_content_calendar(user_email, seed=seed)
+
+                col_script, col_monitor = st.columns([2, 1])
+
+                with col_script:
+                    st.subheader("AI Video Script Generator")
+                    st.caption(f"Script for: {sample_make} {sample_car.get('Model', 'Car')}")
+                    st.text_area("Generated Script", ai_script, height=200, key=f"script_{seed}")
+                    
+                with col_monitor:
+                    st.subheader("Competitor Monitoring")
+                    st.caption(f"Pricing Index for {sample_make}")
+                    st.dataframe(comp_df, hide_index=True)
+
+                st.subheader("📅 Automated Weekly Content Calendar")
+                st.dataframe(content_calendar, hide_index=True)
+
+
             # Example car images for visual interest (Always shows filtered makes if possible)
             unique_makes = demo_df['Make'].unique()
             img_cols = st.columns(min(len(unique_makes), 5))
