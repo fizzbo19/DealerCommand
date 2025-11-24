@@ -11,6 +11,7 @@ from openai import OpenAI
 import os
 import json
 import random
+import uuid
 
 # ----------------------
 # AI CLIENT

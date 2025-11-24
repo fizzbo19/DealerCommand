@@ -712,42 +712,55 @@ with main_tabs[1]:
             st.info("Showing Demo Dashboards. Upgrade to Platinum for AI Summary and premium tools.")
             show_summary = False
 
-        # NOTE: Simple demo data generator used here for consistency
-        def generate_demo_data(seed=42, n=50):
+        # NOTE: Rich demo data generator used here for maximum value showcase
+        def generate_rich_demo_data(seed=42, n=100):
             random.seed(seed)
-            makes = ["BMW", "Audi", "Mercedes", "Tesla", "Porsche", "Jaguar", "Land Rover"]
-            models = ["X5", "Q7", "GLE", "Model S", "Cayenne", "F-Pace", "Discovery"]
+            makes = ["BMW", "Audi", "Mercedes", "Tesla", "Porsche"]
+            models = {"BMW": ["X5", "3 Series"], "Audi": ["Q7", "A4"], "Mercedes": ["GLE", "C-Class"], "Tesla": ["Model 3", "Model Y"], "Porsche": ["911", "Cayenne"]}
+            sources = ["Website", "Autotrader", "Facebook", "Walk-in"]
+            
             data = []
             for _ in range(n):
                 make = random.choice(makes)
+                model = random.choice(models.get(make, ["Sedan"]))
+                days_on_lot = random.randint(5, 120)
+                price = random.randint(30000, 100000)
+                
+                # Mock sales data based on model popularity and age
+                sold = random.choices([True, False], weights=[0.6 if days_on_lot < 60 else 0.2, 0.4 if days_on_lot < 60 else 0.8], k=1)[0]
+                
                 data.append({
                     "Make": make, 
-                    "Model": random.choice(models), 
+                    "Model": model, 
                     "Year": random.randint(2018, 2023),
-                    "Price_num": random.randint(40000, 90000),
-                    "Mileage_num": random.randint(5000, 50000),
+                    "Price_num": price,
+                    "Mileage_num": random.randint(5000, 55000),
+                    "Color": random.choice(["Black", "White", "Silver", "Blue"]),
                     "Features": random.choice(["Nav, Heated Seats", "M Sport Pkg", "Panoramic Roof"]),
-                    "Timestamp_parsed": datetime.utcnow() - timedelta(days=random.randint(1, 365))
+                    "Timestamp_parsed": datetime.utcnow() - timedelta(days=days_on_lot),
+                    "Days_On_Lot": days_on_lot,
+                    "Lead_Source": random.choice(sources),
+                    "Sales_Velocity": random.randint(1, 10), # Mock metric for sales forecast
+                    "Social_ROI": random.randint(10, 500)
                 })
             df = pd.DataFrame(data)
-            df['Price'] = df['Price_num'].apply(lambda x: f"£{x:,}") # Recreate original format for display
+            df['Price'] = df['Price_num'].apply(lambda x: f"£{x:,}")
             df['Mileage'] = df['Mileage_num'].apply(lambda x: f"{x:,} miles")
             return df
         
         # Define 5 Demo Dashboards with unique themes/seeds
         demo_seeds = {
-            "1. Luxury SUV Market": 101,
-            "2. EV Segment Performance": 202,
-            "3. High-Mileage Price Elasticity": 303,
-            "4. Sport/Performance Models": 404,
-            "5. Inventory Age & Listing Trend": 505
+            "1. Core Inventory Health (Stale Stock)": 101,
+            "2. Sales Velocity & Price Elasticity": 202,
+            "3. Lead Source Performance & ROI": 303,
+            "4. Top 5 Make/Model Performance": 404,
+            "5. Pricing Index & Forecast": 505
         }
         
         for name, seed in demo_seeds.items():
             st.markdown(f"## {name}")
             
-            # Use the simple generator for consistent data format
-            demo_df = generate_demo_data(seed=seed) 
+            demo_df = generate_rich_demo_data(seed=seed) 
             
             # Apply demo-specific filtering if selected
             render_dashboard(
@@ -762,24 +775,24 @@ with main_tabs[1]:
             if is_platinum_user:
                 st.markdown("#### 🎬 Platinum Tools Showcase")
                 
-                sample_car = demo_df.iloc[0].to_dict()
-                sample_make = sample_car['Make']
-                sample_features = sample_car['Features']
+                # Use the first filtered car for the AI script demo
+                sample_car_data = demo_df.head(1).iloc[0].to_dict()
+                sample_make = sample_car_data['Make']
                 
-                # The backend function generate_ai_video_script expects the full listing data dictionary
-                # sample_car contains all the necessary keys (Make, Model, Features, etc.)
-                ai_script = generate_ai_video_script(user_email, sample_car)
+                # 1. AI Script Generator
+                ai_script = generate_ai_video_script(user_email, sample_car_data)
                 
-                # Competitor monitoring expects the make
+                # 2. Competitor Monitoring
                 comp_df = competitor_monitoring(user_email, sample_make, seed)
                 
+                # 3. Content Calendar
                 content_calendar = generate_weekly_content_calendar(user_email, seed=seed)
 
                 col_script, col_monitor = st.columns([2, 1])
 
                 with col_script:
                     st.subheader("AI Video Script Generator")
-                    st.caption(f"Script for: {sample_make} {sample_car.get('Model', 'Car')}")
+                    st.caption(f"Script for: {sample_make} {sample_car_data.get('Model', 'Car')}")
                     st.text_area("Generated Script", ai_script, height=200, key=f"script_{seed}")
                     
                 with col_monitor:
@@ -800,11 +813,12 @@ with main_tabs[1]:
             
             for idx, make in enumerate(display_makes[:5]):
                 img_url = get_car_image_url(make)
-                img_cols[idx % 5].image(
-                    img_url, 
-                    caption=f"{make} Sample", 
-                    use_container_width=True
-                )
+                if idx < 5: # Safety index check
+                    img_cols[idx % 5].image(
+                        img_url, 
+                        caption=f"{make} Sample", 
+                        use_container_width=True
+                    )
             st.markdown("---")
 
 
