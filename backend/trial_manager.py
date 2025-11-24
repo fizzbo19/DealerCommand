@@ -10,7 +10,6 @@ from backend.sheet_utils import (
     get_sheet_data,
     get_dealership_profile,
     save_dealership_profile,
-    # api_get_dealership_profile removed as we use the local get_dealership_status
 )
 
 # ----------------------
@@ -47,7 +46,7 @@ def _get_user_activity_row(email: str):
 # ----------------------
 def ensure_user_and_get_status(email: str, plan="Free Trial"):
     """
-    Ensures user record exists and returns status, start/expiry dates, usage, and plan.
+    Ensures user record exists and returns 5 values: status, expiry_date, usage_count, plan, and start_date.
     """
     current_row = _get_user_activity_row(email)
     now = datetime.utcnow()
@@ -82,50 +81,54 @@ def ensure_user_and_get_status(email: str, plan="Free Trial"):
         "Usage_Count": usage_count,
         "Plan": current_plan
     }
+    # This upsert ensures the row exists BEFORE we try to update usage
     upsert_to_sheet("User_Activity", key_col="Email", data_dict=data_to_save)
     
     # Ensure profile sheet reflects plan (for seat management)
     save_dealership_profile(email, {"Plan": current_plan, "Trial_Status": status})
 
-    # Return status, expiry, usage, and plan (using the validated, final values)
-    return status, expiry_date, usage_count, current_plan
+    # Return 5 values including start_date (Line 91)
+    return status, expiry_date, usage_count, current_plan, start_date 
 
 # ----------------------
 # USAGE MANAGEMENT
 # ----------------------
 def _update_activity_record(email: str, new_count: int, plan: str):
-    """Update usage without resetting trial dates."""
-    # Ensure user exists and get current status/dates
-    status, expiry_date, _, current_plan = ensure_user_and_get_status(email, plan)
+    """
+    Update usage record. This function no longer re-reads the sheet, preventing the race condition.
+    """
+    # Ensure user exists and get current status/dates. Unpack 5 values.
+    # CRITICAL: We rely on the start_date returned by ensure_user_and_get_status
+    status, expiry_date, _, current_plan, start_date = ensure_user_and_get_status(email, plan) 
     
-    # Get the specific Start Date from the sheet (necessary for consistency)
-    current_row = _get_user_activity_row(email)
-    start_date = _safe_parse_date(current_row.get("Start_Date"), datetime.utcnow())
-
     data_to_save = {
         "Email": email,
-        # Save dates as ISO strings to prevent accidental parsing/formatting issues
-        "Start_Date": start_date.isoformat(),
+        # Use the start_date received from the ensure function (which either read it or just wrote it)
+        "Start_Date": start_date.isoformat(), 
         "Expiry_Date": expiry_date.isoformat(),
         "Status": status,
         "Usage_Count": new_count,
         "Plan": current_plan
     }
+    # Perform the final usage update
     upsert_to_sheet("User_Activity", key_col="Email", data_dict=data_to_save)
     return new_count
 
 def increment_usage(email: str, num=1):
     """Increments the listing usage count."""
-    status, expiry_date, usage_count, plan = ensure_user_and_get_status(email)
+    # Unpack 5 values (we ignore the 5th value: start_date)
+    status, expiry_date, usage_count, plan, _ = ensure_user_and_get_status(email) 
     return _update_activity_record(email, usage_count + num, plan)
 
 def decrement_listing_count(email: str, num=1):
     """Decrements remaining listings (for Platinum users, by reducing Usage_Count)."""
-    status, expiry_date, usage_count, plan = ensure_user_and_get_status(email)
+    # Unpack 5 values (we ignore the 5th value: start_date)
+    status, expiry_date, usage_count, plan, _ = ensure_user_and_get_status(email) 
     return _update_activity_record(email, max(usage_count - num, 0), plan)
 
 def get_remaining_days(email: str):
-    _, expiry_date, _, _ = ensure_user_and_get_status(email)
+    # Unpack 5 values (we only need the expiry date)
+    _, expiry_date, _, _, _ = ensure_user_and_get_status(email) 
     return max(0, (expiry_date - datetime.utcnow()).days)
 
 def reset_trial(email: str):
@@ -150,9 +153,9 @@ def reset_trial(email: str):
 def get_dealership_status(email: str):
     """
     Returns full dealership profile combined with persistent usage and plan info.
-    This is the main function called by the frontend.
     """
-    status, expiry, usage_count, base_plan = ensure_user_and_get_status(email)
+    # Unpack 5 values (we ignore the 5th value: start_date)
+    status, expiry, usage_count, base_plan, _ = ensure_user_and_get_status(email) 
     profile_details = get_dealership_profile(email)
 
     # Determine the effective plan (Platinum during active trial)
@@ -174,7 +177,7 @@ def get_dealership_status(email: str):
 
 def check_listing_limit(email: str):
     """Checks the listing limit using the local, robust data."""
-    profile = get_dealership_status(email) # Use the local, robust function
+    profile = get_dealership_status(email) 
     return profile.get("Remaining_Listings", 0) > 0
 
 # ----------------------
